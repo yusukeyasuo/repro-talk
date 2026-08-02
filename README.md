@@ -94,6 +94,9 @@ npm run build
 
 Vercel にそのまま乗る。環境変数3つを設定し、Supabase の Redirect URLs に本番ドメインの `/auth/callback` を追加する。
 
-## 開発メモ
+## ドキュメント
 
-設計上の制約と決定は `CLAUDE.md` にまとめてある。
+| | |
+|---|---|
+| [`docs/spec.md`](docs/spec.md) | **仕様**。画面ごとの機能、データモデル、AIエンドポイント、環境ごとの制約、検証状況 |
+| [`CLAUDE.md`](CLAUDE.md) | 設計判断の背景と、コードを触るときの約束事 |
