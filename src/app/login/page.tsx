@@ -1,17 +1,22 @@
 'use client';
 
+import { ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { localMailboxUrl } from '@/lib/local-dev';
 import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [message, setMessage] = useState('');
+
+  // ローカルの Supabase はメールを外に出さず Mailpit に溜める
+  const mailbox = localMailboxUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -40,11 +45,35 @@ export default function LoginPage() {
             リプロダクションと独り言を続けるための場所。
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {status === 'sent' ? (
-            <p className="text-sm text-muted-foreground">
-              {email} にログイン用のリンクを送りました。メールを開いてください。
-            </p>
+            mailbox ? (
+              <div className="space-y-3">
+                <p className="text-sm">
+                  ローカル環境なので、メールは <strong>送信されません</strong>。
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Mailpit を開いて、いちばん新しい「Your Magic Link」のリンクをクリックしてください。
+                </p>
+                <Button
+                  className="w-full"
+                  nativeButton={false}
+                  render={
+                    <a href={mailbox} target="_blank" rel="noreferrer noopener">
+                      Mailpit を開く
+                      <ExternalLink className="size-4" />
+                    </a>
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  このブラウザで開いてください。別のブラウザだと検証に失敗します。
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {email} にログイン用のリンクを送りました。メールを開いてください。
+              </p>
+            )
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -66,6 +95,13 @@ export default function LoginPage() {
                 {status === 'sending' ? '送信中…' : 'ログインリンクを送る'}
               </Button>
             </form>
+          )}
+
+          {mailbox && status !== 'sent' && (
+            <p className="border-t pt-3 text-xs text-muted-foreground">
+              ローカルの Supabase に接続しています。ログインメールは実際には送信されず、
+              Mailpit（{new URL(mailbox).host}）に届きます。
+            </p>
           )}
         </CardContent>
       </Card>
