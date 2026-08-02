@@ -1,0 +1,17 @@
+{
+  "name": "repro-talk",
+  "short_name": "repro-talk",
+  "description": "リプロダクションと独り言で英語を伸ばす",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

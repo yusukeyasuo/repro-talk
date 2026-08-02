@@ -1,0 +1,35 @@
+-- 独り言のお題30個（1日1個で1ヶ月）
+-- user_id が null なので全ユーザーが読める。ユーザー独自のお題は user_id 付きで追加される。
+
+insert into public.monologue_topics (user_id, title_en, title_ja, category, sort_order) values
+  (null, 'What I did today',                  '今日やったこと',                       'daily',    1),
+  (null, 'What I ate today',                  '今日食べたもの',                       'daily',    2),
+  (null, 'How I feel right now',              '今感じている気持ち',                   'feeling',  3),
+  (null, 'What is on my mind lately',         '最近気になっていること',               'feeling',  4),
+  (null, 'My morning routine',                '朝のルーティン',                       'daily',    5),
+  (null, 'My hobbies',                        '趣味の話',                             'self',     6),
+  (null, 'My favorite artist',                '好きなアーティスト',                   'favorite', 7),
+  (null, 'A movie or show I watched recently','最近見た映画やドラマ',                 'favorite', 8),
+  (null, 'My future goals',                   '将来の目標',                           'self',     9),
+  (null, 'A country I want to visit',         '行ってみたい国',                       'dream',   10),
+  (null, 'My hometown',                       '地元の話',                             'self',    11),
+  (null, 'What I did last weekend',           '先週末にしたこと',                     'daily',   12),
+  (null, 'A person I respect',                '尊敬している人',                       'self',    13),
+  (null, 'My job, explained simply',          '自分の仕事を簡単に説明する',           'work',    14),
+  (null, 'A problem I solved at work',        '仕事で解決した問題',                   'work',    15),
+  (null, 'What I would do with a free day',   '1日自由に使えたら何をするか',          'dream',   16),
+  (null, 'My favorite food and why',          '好きな食べ物とその理由',               'favorite',17),
+  (null, 'Something I want to learn',         '学びたいこと',                         'self',    18),
+  (null, 'The room I am in right now',        '今いる部屋の説明',                     'describe',19),
+  (null, 'What I can see outside the window', '窓の外に見えるもの',                   'describe',20),
+  (null, 'A habit I want to change',          '変えたい習慣',                         'self',    21),
+  (null, 'The best thing that happened this week', '今週いちばん良かったこと',        'daily',   22),
+  (null, 'Something that annoyed me recently','最近イラっとしたこと',                 'feeling', 23),
+  (null, 'How I spend my money',              'お金の使い方',                         'self',    24),
+  (null, 'My ideal weekend',                  '理想の週末',                           'dream',   25),
+  (null, 'A book or article I read',          '読んだ本や記事',                       'favorite',26),
+  (null, 'What I would tell my past self',    '過去の自分に言いたいこと',             'self',    27),
+  (null, 'Why I am learning English',         'なぜ英語を学んでいるのか',             'self',    28),
+  (null, 'A place I go to relax',             'リラックスするために行く場所',         'describe',29),
+  (null, 'What I want to be doing in 5 years','5年後にやっていたいこと',              'dream',   30)
+on conflict do nothing;

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#0a0a0a"/>
+  <!-- 100 を受け取る（上の波）と 0 から生み出す（下の波）が繋がるイメージ -->
+  <path d="M96 200 q40 -72 80 0 t80 0 t80 0 t80 0" fill="none" stroke="#f59e0b" stroke-width="24" stroke-linecap="round"/>
+  <path d="M96 312 q40 72 80 0 t80 0 t80 0 t80 0" fill="none" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+</svg>
