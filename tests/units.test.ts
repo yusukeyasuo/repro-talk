@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { calcStreak, buildHeatmap, shiftDate } from '../src/lib/activity.ts';
+import { isLocalSupabase, localMailboxUrl } from '../src/lib/local-dev.ts';
 import { cleanTranscript, splitSentences } from '../src/lib/transcript.ts';
 import { extractVideoId, formatDurationJa, formatSeconds } from '../src/lib/youtube.ts';
 import { normalizeAnnotations } from '../src/types/annotation.ts';
@@ -142,6 +143,25 @@ describe('annotation: AI と手入力の両方を正規化する', () => {
   it('配列でなければ空配列', () => {
     assert.deepEqual(normalizeAnnotations(null, 10), []);
     assert.deepEqual(normalizeAnnotations({ type: 'stress' }, 10), []);
+  });
+});
+
+describe('local-dev: ローカル Supabase の判定と Mailpit の URL', () => {
+  it('ローカルなら Mailpit の URL を返す', () => {
+    assert.equal(localMailboxUrl('http://127.0.0.1:54321'), 'http://127.0.0.1:54324');
+    assert.equal(localMailboxUrl('http://localhost:54321'), 'http://localhost:54324');
+  });
+
+  it('クラウドの Supabase では null（＝本物のメールが届く）', () => {
+    assert.equal(localMailboxUrl('https://abcdefg.supabase.co'), null);
+    assert.equal(isLocalSupabase('https://abcdefg.supabase.co'), false);
+  });
+
+  it('未設定・不正な URL でも落ちない', () => {
+    assert.equal(localMailboxUrl(undefined), null);
+    assert.equal(localMailboxUrl(''), null);
+    assert.equal(localMailboxUrl('not a url'), null);
+    assert.equal(isLocalSupabase(undefined), false);
   });
 });
 

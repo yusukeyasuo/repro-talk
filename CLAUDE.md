@@ -86,6 +86,7 @@ src/lib/activity.ts      連続日数・ヒートマップ（日付境界は Asi
 - **`font-mono`（Geist Mono）に日本語グリフはない**。「3回」「1日」「30秒」のような単位は必ず `font-mono` の外に出す。中に入れると豆腐になる
 - 注釈ツールバーのボタンは `onMouseDown` で `preventDefault()` する。しないと mousedown で選択が解除され、onClick 時に範囲を失う
 - `YT.Player` は渡した要素を iframe で**置き換える**ので、React の ref を直接渡さず使い捨ての子要素を挟む。iframe は 640x360 固定なので `[&>iframe]:size-full` で埋める
+- **ローカルの Supabase はメールを外に出さない**（Mailpit に溜まる）。ローカル固有の案内は `src/lib/local-dev.ts` の `localMailboxUrl()` で出し分ける。`NEXT_PUBLIC_SUPABASE_URL` のホスト名で判定し、クラウド接続時は何も出さない
 
 ## ローカル開発
 
