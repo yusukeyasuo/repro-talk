@@ -52,7 +52,9 @@ export function Workspace({ clip, material, userId }: Props) {
   const [rate, setRate] = useState<number>(1);
   const [loop, setLoop] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [repCount, setRepCount] = useState(0);
+  const [reps, setReps] = useState(0); // このセッションで数えた回数（表示・単調増加）
+  const savedRepsRef = useRef(0); // うち practice_logs に保存済みの数
+  const [repSaveState, setRepSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [abRunning, setAbRunning] = useState(false);
 
   const [recorded, setRecorded] = useState<RecordedClip | null>(null);
@@ -97,8 +99,13 @@ export function Workspace({ clip, material, userId }: Props) {
 
   /** お手本の区間が終わったとき。「1文再生 → 止める」がリプロダクションの要。 */
   function handleRangeEnd() {
-    setRepCount((count) => count + 1);
-    if (abRef.current) playSelf();
+    if (abRef.current) {
+      // 聴き比べ中はお手本 → 自分に渡すだけ。回数には数えない。
+      playSelf();
+      return;
+    }
+    setReps((count) => count + 1);
+    setRepSaveState('saving');
   }
 
   function startAb() {
@@ -246,18 +253,51 @@ export function Workspace({ clip, material, userId }: Props) {
     });
   }
 
-  function recordReps() {
-    if (repCount === 0) return;
-    startTransition(async () => {
-      const result = await logPractice({ clipId: clip.id, repCount });
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(`${repCount} 回を記録しました`);
-      setRepCount(0);
-    });
-  }
+  // リプロダクション回数の自動記録。押し忘れで回数が消えないよう、まだ保存していない分を
+  // practice_logs へ差分で書き込む（本数ぶんの行を作る。daily_activity ビューが日付ごとに合算する）。
+  const flushReps = useCallback(async () => {
+    const delta = reps - savedRepsRef.current;
+    if (delta <= 0) return;
+    setRepSaveState('saving');
+    savedRepsRef.current = reps; // 楽観的に進める
+    const result = await logPractice({ clipId: clip.id, repCount: delta });
+    if (!result.ok) {
+      savedRepsRef.current -= delta; // 失敗したら戻す
+      setRepSaveState('error');
+      toast.error(`記録に失敗しました: ${result.error}`);
+      return;
+    }
+    setRepSaveState('saved');
+  }, [reps, clip.id]);
+
+  // 再生が少し落ち着いたら自動記録する（debounce）
+  useEffect(() => {
+    if (reps <= savedRepsRef.current) return;
+    const timer = setTimeout(() => {
+      void flushReps();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [reps, flushReps]);
+
+  // タブを離れる/リロード直前に未記録があればフラッシュ
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === 'hidden') void flushReps();
+    };
+    document.addEventListener('visibilitychange', flush);
+    return () => document.removeEventListener('visibilitychange', flush);
+  }, [flushReps]);
+
+  // クリップ間の移動などアンマウント時にも未記録をフラッシュする
+  const flushRepsRef = useRef(flushReps);
+  useEffect(() => {
+    flushRepsRef.current = flushReps;
+  }, [flushReps]);
+  useEffect(() => {
+    return () => {
+      void flushRepsRef.current();
+    };
+  }, []);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
@@ -363,18 +403,26 @@ export function Workspace({ clip, material, userId }: Props) {
           <div>
             <p className="text-xs text-muted-foreground">今回のリプロダクション</p>
             <p className="text-2xl">
-              <span className="font-mono tabular-nums">{repCount}</span> 回
+              <span className="font-mono tabular-nums">{reps}</span> 回
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="ml-auto"
-            onClick={recordReps}
-            disabled={repCount === 0 || pending}
-          >
-            記録する
-          </Button>
+          <div className="ml-auto">
+            {repSaveState === 'error' ? (
+              <Button size="sm" variant="outline" onClick={() => void flushReps()}>
+                記録に失敗 · 再試行
+              </Button>
+            ) : repSaveState === 'saving' ? (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                記録中…
+              </span>
+            ) : repSaveState === 'saved' ? (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Check className="size-3.5" />
+                記録済み
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
 
