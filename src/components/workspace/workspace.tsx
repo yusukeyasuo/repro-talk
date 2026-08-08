@@ -1,13 +1,13 @@
 'use client';
 
 import {
+  Check,
   Ear,
   Loader2,
   Mic,
   Pause,
   Play,
   Repeat,
-  Save,
   Square,
   Sparkles,
 } from 'lucide-react';
@@ -59,6 +59,7 @@ export function Workspace({ clip, material, userId }: Props) {
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [pending, startTransition] = useTransition();
 
   const recorder = useRecorder();
@@ -74,14 +75,20 @@ export function Workspace({ clip, material, userId }: Props) {
     };
   }, [recorded]);
 
-  const playModel = useCallback(() => {
-    playerRef.current?.playRange(clip.start_sec, clip.end_sec, loop);
-  }, [clip.start_sec, clip.end_sec, loop]);
+  // once=true のときはループトグルを無視して必ず1回だけ再生する。
+  // 聴き比べ（お手本 → 自分 → お手本 …）ではお手本が区間の終端で止まらないと
+  // 録音に切り替わらないため、聴き比べ中は常に once で呼ぶ。
+  const playModel = useCallback(
+    ({ once = false }: { once?: boolean } = {}) => {
+      playerRef.current?.playRange(clip.start_sec, clip.end_sec, once ? false : loop);
+    },
+    [clip.start_sec, clip.end_sec, loop],
+  );
 
   const playSelf = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !recorded) {
-      if (abRef.current) playModel();
+      if (abRef.current) playModel({ once: true });
       return;
     }
     audio.currentTime = 0;
@@ -98,8 +105,8 @@ export function Workspace({ clip, material, userId }: Props) {
     if (!recorded) return;
     abRef.current = true;
     setAbRunning(true);
-    // お手本 → 自分 → お手本 … を繰り返す
-    playerRef.current?.playRange(clip.start_sec, clip.end_sec, false);
+    // お手本 → 自分 → お手本 … を繰り返す。お手本は毎回1回だけ再生する。
+    playModel({ once: true });
   }
 
   function stopAb() {
@@ -178,23 +185,45 @@ export function Workspace({ clip, material, userId }: Props) {
     }
   }
 
-  function save() {
-    startTransition(async () => {
-      const result = await updateClip({
-        id: clip.id,
-        transcript,
-        translationJa: translation || null,
-        annotations,
-        memo: memo || null,
-      });
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      setDirty(false);
-      toast.success('保存しました');
+  // 自動保存：和訳・マーキング・メモ・AI解析結果が変わったら少し待って保存する。
+  // 手動保存を待たずに済むので、リロードしても STEP3 の作り込みが失われない。
+  const persist = useCallback(async () => {
+    setSaveState('saving');
+    const result = await updateClip({
+      id: clip.id,
+      transcript,
+      translationJa: translation || null,
+      annotations,
+      memo: memo || null,
     });
-  }
+    if (!result.ok) {
+      setSaveState('error');
+      toast.error(`保存に失敗しました: ${result.error}`);
+      return;
+    }
+    setDirty(false);
+    setSaveState('saved');
+  }, [clip.id, transcript, translation, annotations, memo]);
+
+  // dirty になったら debounce して自動保存（スクリプト編集中は別導線なので除く）
+  useEffect(() => {
+    if (!dirty || editingTranscript) return;
+    const timer = setTimeout(() => {
+      void persist();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [dirty, editingTranscript, persist]);
+
+  // タブを離れる/リロード直前に、未保存があれば即フラッシュする（debounce の取りこぼし対策）
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === 'hidden' && dirty) {
+        void persist();
+      }
+    };
+    document.addEventListener('visibilitychange', flush);
+    return () => document.removeEventListener('visibilitychange', flush);
+  }, [dirty, persist]);
 
   function saveTranscript(next: string) {
     startTransition(async () => {
@@ -250,7 +279,7 @@ export function Workspace({ clip, material, userId }: Props) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={playing ? () => playerRef.current?.pause() : playModel}>
+            <Button size="sm" onClick={playing ? () => playerRef.current?.pause() : () => playModel()}>
               {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
               {playing ? '止める' : loop ? 'ループ再生' : '1回再生して止める'}
             </Button>
@@ -320,7 +349,7 @@ export function Workspace({ clip, material, userId }: Props) {
               controls
               className="w-full"
               onEnded={() => {
-                if (abRef.current) playModel();
+                if (abRef.current) playModel({ once: true });
               }}
             />
           )}
@@ -366,12 +395,21 @@ export function Workspace({ clip, material, userId }: Props) {
                   {analyzing ? '解析中…' : 'AI で音を解析'}
                 </Button>
               )}
-              {dirty && (
-                <Button size="sm" onClick={save} disabled={pending}>
-                  <Save className="size-4" />
-                  保存
+              {saveState === 'error' ? (
+                <Button size="sm" variant="outline" onClick={() => void persist()}>
+                  保存に失敗 · 再試行
                 </Button>
-              )}
+              ) : dirty ? (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  保存中…
+                </span>
+              ) : saveState === 'saved' ? (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Check className="size-3.5" />
+                  保存済み
+                </span>
+              ) : null}
             </div>
           </div>
 
