@@ -30,8 +30,8 @@ export function PhraseList({ phrases }: { phrases: Phrase[] }) {
               <p className="mt-0.5 text-xs text-muted-foreground">{phrase.meaning_ja}</p>
             )}
             <div className="mt-1.5 flex items-center gap-2">
-              <Badge variant={phrase.used_count > 0 ? 'secondary' : 'outline'}>
-                {phrase.used_count > 0 ? `${phrase.used_count} 回使った` : '未使用'}
+              <Badge variant={phrase.graduated_at ? 'secondary' : 'outline'}>
+                {phrase.graduated_at ? '身についた' : '在庫'}
               </Badge>
               {phrase.clip_id && (
                 <Link

@@ -7,13 +7,11 @@ import { toast } from 'sonner';
 
 import { saveMonologueFeedback, saveMonologueSession } from '@/app/actions/monologue';
 import { addPhrases, markPhraseUsed } from '@/app/actions/phrases';
-import { saveRecording } from '@/app/actions/recordings';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { extensionForMimeType, useRecorder } from '@/hooks/use-recorder';
+import { useRecorder } from '@/hooks/use-recorder';
 import { useWakeLock } from '@/hooks/use-wake-lock';
-import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import { formatDurationJa } from '@/lib/youtube';
 import type { AiSuggestion, MonologueTopic, Phrase } from '@/types/database';
@@ -21,7 +19,6 @@ import type { AiSuggestion, MonologueTopic, Phrase } from '@/types/database';
 type Props = {
   topics: MonologueTopic[];
   phrases: Phrase[];
-  userId: string;
   goalSec: number;
 };
 
@@ -35,7 +32,7 @@ function todayIndex(length: number) {
   return days % length;
 }
 
-export function MonologueSession({ topics, phrases, userId, goalSec }: Props) {
+export function MonologueSession({ topics, phrases, goalSec }: Props) {
   const router = useRouter();
   const recorder = useRecorder();
   const wakeLock = useWakeLock();
@@ -71,6 +68,8 @@ export function MonologueSession({ topics, phrases, userId, goalSec }: Props) {
     setLastDuration(result.durationSec);
     setSaving(true);
     try {
+      // 録音は「やった事実」の可視化が目的で、音声そのものは聴き返さない。
+      // だから Storage には上げず、話した時間だけを記録する。
       const session = await saveMonologueSession({
         topicId: topic?.id ?? null,
         mode: 'phone',
@@ -82,28 +81,6 @@ export function MonologueSession({ topics, phrases, userId, goalSec }: Props) {
         return;
       }
       setSessionId(session.data.id);
-
-      // 録音は「やった事実」を残すのが目的。失敗しても記録自体は残す。
-      const supabase = createClient();
-      const path = `${userId}/monologue/${crypto.randomUUID()}.${extensionForMimeType(
-        result.mimeType,
-      )}`;
-      const { error } = await supabase.storage
-        .from('recordings')
-        .upload(path, result.blob, { contentType: result.mimeType });
-
-      if (error) {
-        toast.warning('録音の保存に失敗しましたが、記録は残しました');
-      } else {
-        await saveRecording({
-          kind: 'monologue',
-          storagePath: path,
-          mimeType: result.mimeType,
-          durationSec: result.durationSec,
-          monologueSessionId: session.data.id,
-        });
-      }
-
       URL.revokeObjectURL(result.url);
       toast.success(`${formatDurationJa(result.durationSec)} 話しました`);
       router.refresh();

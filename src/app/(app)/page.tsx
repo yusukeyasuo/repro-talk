@@ -30,10 +30,10 @@ export default async function DashboardPage() {
       supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
       supabase
         .from('clips')
-        .select('id, label, transcript, material_id')
+        .select('id, label, transcript, annotations, material_id')
         .order('updated_at', { ascending: false })
-        .limit(1),
-      supabase.from('phrases').select('id', { count: 'exact', head: true }).eq('used_count', 0),
+        .limit(10),
+      supabase.from('phrases').select('id', { count: 'exact', head: true }).is('graduated_at', null),
     ]);
 
   const rows = (activity ?? []) as DailyActivity[];
@@ -49,10 +49,20 @@ export default async function DashboardPage() {
 
   const why = (profile as Profile | null)?.why_text;
   const goalSec = (profile as Profile | null)?.daily_goal_sec ?? 60;
-  const lastClip = (recentClips ?? [])[0] as Pick<
+
+  const recent = (recentClips ?? []) as Pick<
     Clip,
-    'id' | 'label' | 'transcript' | 'material_id'
-  > | undefined;
+    'id' | 'label' | 'transcript' | 'annotations' | 'material_id'
+  >[];
+  // 作りかけ = スクリプトは入っているが記号がまだ付いていないクリップ。
+  // クリップは使い捨てなので、仕上げたものには出戻りさせず新規の切り出しへ促す。
+  const unfinished = recent.find((clip) => clip.transcript && (clip.annotations?.length ?? 0) === 0);
+  const reproHref = unfinished ? `/clips/${unfinished.id}` : '/materials';
+  const reproLabel = unfinished
+    ? unfinished.label || unfinished.transcript || '作りかけを仕上げる'
+    : recent.length === 0
+      ? 'まず素材を1本登録する'
+      : '新しく切り出す';
 
   const reproDone = (todayRow?.reproduction_reps ?? 0) > 0;
   const monologueDone = (todayRow?.monologue_sec ?? 0) >= goalSec;
@@ -82,7 +92,7 @@ export default async function DashboardPage() {
         <h2 className="text-sm font-medium">今日やること</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <Link
-            href={lastClip ? `/clips/${lastClip.id}` : '/materials'}
+            href={reproHref}
             className="group rounded-xl border p-5 transition-colors hover:bg-accent/40"
           >
             <div className="flex items-center gap-2">
@@ -93,11 +103,7 @@ export default async function DashboardPage() {
             <p className="mt-2 text-xs text-muted-foreground">
               完成された英語を 100 のまま受け取る。1文再生 → 止める → 同じように言う。
             </p>
-            <p className="mt-2 line-clamp-1 text-sm">
-              {lastClip
-                ? lastClip.label || lastClip.transcript || '前回のクリップを続ける'
-                : 'まず素材を1本登録する'}
-            </p>
+            <p className="mt-2 line-clamp-1 text-sm">{reproLabel}</p>
           </Link>
 
           <Link

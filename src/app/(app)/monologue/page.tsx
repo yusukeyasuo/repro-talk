@@ -14,12 +14,13 @@ export default async function MonologuePage() {
 
   const [{ data: topics }, { data: phrases }, { data: profile }] = await Promise.all([
     supabase.from('monologue_topics').select('*').order('sort_order'),
-    // 未使用・最終使用が古い順。「まだ口から出していない表現」を優先して出す。
+    // まだ卒業していない在庫だけを、新しく入れた順に出す（温かいうちに口から出す）。
+    // 一度でも使えたフレーズは graduated_at が入り、ここには出てこない。
     supabase
       .from('phrases')
       .select('*')
-      .order('used_count', { ascending: true })
-      .order('last_used_at', { ascending: true, nullsFirst: true })
+      .is('graduated_at', null)
+      .order('created_at', { ascending: false })
       .limit(3),
     supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
   ]);
@@ -36,7 +37,6 @@ export default async function MonologuePage() {
       <MonologueSession
         topics={(topics ?? []) as MonologueTopic[]}
         phrases={(phrases ?? []) as Phrase[]}
-        userId={user.id}
         goalSec={(profile as Profile | null)?.daily_goal_sec ?? 60}
       />
     </div>
