@@ -60,9 +60,11 @@ export function buildHeatmap(
     for (let day = 0; day < 7; day += 1) {
       const date = shiftDate(firstSunday, w * 7 + day);
       const row = byDate.get(date);
+      // 1rep ≈ 独り言1分 で合算した1次元スコア。rep は「言えた」タップ（意図的な再現）
+      // なので以前の再生カウントより希少。実データで再調整する前提の暫定境界。
       const score = (row?.reproduction_reps ?? 0) + Math.round((row?.monologue_sec ?? 0) / 60);
       const level: HeatmapCell['level'] =
-        score === 0 ? 0 : score < 3 ? 1 : score < 8 ? 2 : score < 20 ? 3 : 4;
+        score === 0 ? 0 : score < 2 ? 1 : score < 5 ? 2 : score < 12 ? 3 : 4;
       column.push({
         date,
         level,

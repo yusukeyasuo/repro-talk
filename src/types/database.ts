@@ -95,6 +95,8 @@ export type Phrase = {
   meaning_ja: string | null;
   used_count: number;
   last_used_at: string | null;
+  /** 初回使用で「身についた」に卒業した時刻。NULL なら在庫（今日使うフレーズに出る）。 */
+  graduated_at: string | null;
 } & Timestamps;
 
 export type DailyActivity = {
@@ -150,7 +152,7 @@ export type Database = {
       >;
       phrases: Table<
         Phrase,
-        'id' | 'clip_id' | 'meaning_ja' | 'used_count' | 'last_used_at' | 'created_at'
+        'id' | 'clip_id' | 'meaning_ja' | 'used_count' | 'last_used_at' | 'graduated_at' | 'created_at'
       >;
     };
     Views: {

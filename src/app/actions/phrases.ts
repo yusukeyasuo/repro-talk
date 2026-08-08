@@ -43,15 +43,21 @@ export async function markPhraseUsed(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: current, error: readError } = await supabase
     .from('phrases')
-    .select('used_count')
+    .select('used_count, graduated_at')
     .eq('id', id)
     .single();
 
   if (readError) return { ok: false, error: readError.message };
 
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from('phrases')
-    .update({ used_count: current.used_count + 1, last_used_at: new Date().toISOString() })
+    .update({
+      used_count: current.used_count + 1,
+      last_used_at: now,
+      // 初回使用でその瞬間に「身についた」へ卒業。以降は据え置き。
+      graduated_at: current.graduated_at ?? now,
+    })
     .eq('id', id);
 
   if (error) return { ok: false, error: error.message };

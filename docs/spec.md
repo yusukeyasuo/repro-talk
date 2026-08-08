@@ -50,7 +50,7 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 | 要素 | 内容 |
 |---|---|
 | Why バナー | `profiles.why_text`（英語の先に理解したい何か）を常時表示。未設定なら設定への誘導 |
-| 今日やること | リプロダクション（最後に触ったクリップへ）／独り言。当日完了なら「今日済み」バッジ |
+| 今日やること | リプロダクション（作りかけのクリップ、無ければ新規切り出しへ）／独り言。当日完了なら「今日済み」バッジ |
 | 続いている記録 | 連続日数、今週の独り言の合計時間、今週のリプロダクション回数 |
 | ヒートマップ | 直近12週 × 7日。当日はリング表示、未来日は薄く |
 | フレーズの残 | まだ使っていないフレーズ件数と、独り言への誘導 |
@@ -86,7 +86,7 @@ URL は `watch?v=` / `youtu.be/` / `shorts/` / `embed/` / 生のID / プロト�
 - 区間の A-B ループ。`end` パラメータはループしないので `requestAnimationFrame` で終端を監視して `seekTo` する
 - **「1回再生して止める」** — 区間の終わりで自動停止する。リプロダクションの中核操作（シャドーイングとの違い）
 - 再生速度 `0.5 / 0.75 / 1.0`。0.5倍速は「音を顕微鏡で覗く」用
-- 区間の再生が1回終わるごとにリプロダクション回数が増え、「記録する」で `practice_logs` に残る
+- 「1回再生して止める」→ 自分で同じように言って **「言えた」** を押すとリプロダクション回数が増え、`practice_logs` に自動記録される。ループ再生・聴くだけは数えない（測るのはリスニング回数ではなく**再現した回数**）
 
 **スクリプト**
 
@@ -128,14 +128,14 @@ YouTube の「文字起こしを表示」からコピーして貼り付ける。
 |---|---|
 | 今日のお題 | 共通シード30件から日付ベースで1件。シャッフルで別のお題に |
 | 1人電話 | 大きな録音ボタン、経過タイマー、目標に対する進捗バー。Wake Lock で画面を保つ |
-| 今日使うフレーズ | 未使用・最終使用が古い順に3件。使えたらタップして `used_count` を加算 |
+| 今日使うフレーズ | 在庫（未卒業）を新しい順に3件。使えたらタップ＝その場で「身についた」へ卒業し、翌日から出なくなる |
 | 言えなかったこと | 日本語でメモ → AI が自然な英語表現＋例文2つに変換 → そのままストックへ |
 
-録音は「後で聴くため」ではなく**やった事実の可視化**のために残す。まず1分から。
+録音の**音声そのものは保存しない**（聴き返さないため）。残すのは話した**時間だけ**＝やった事実の可視化。まず1分から。
 
 ### `/phrases` フレーズ・ストック
 
-リプロダクションで入れた表現の在庫。全件数と未使用件数、使用回数バッジ、出典クリップへのリンク、削除。
+リプロダクションで入れた表現。**在庫（未卒業）** と **身についた（卒業済み）** の2区分で表示。出典クリップへのリンク、削除。
 
 ### `/settings`
 
@@ -157,15 +157,15 @@ Supabase / PostgreSQL。**全テーブル RLS 有効、`user_id = auth.uid()` �
 | `practice_logs` | `id`, `user_id`, `clip_id`, `rep_count`, `practiced_at` | リプロダクションの反復記録 |
 | `monologue_topics` | `id`, `user_id`, `title_en`, `title_ja`, `category`, `sort_order`, `created_at` | `user_id` が NULL のものは共通シード30件 |
 | `monologue_sessions` | `id`, `user_id`, `topic_id`, `mode`, `duration_sec`, `ja_memo`, `ai_suggestions`(jsonb), `used_phrase_ids`, `started_at` | 独り言1回分 |
-| `recordings` | `id`, `user_id`, `kind`, `clip_id`, `monologue_session_id`, `storage_path`, `mime_type`, `duration_sec`, `created_at` | 音声本体は Storage。ここはメタデータ |
-| `phrases` | `id`, `user_id`, `clip_id`, `text`, `meaning_ja`, `used_count`, `last_used_at`, `created_at` | **①と②を繋ぐ中核テーブル** |
+| `recordings` | `id`, `user_id`, `kind`, `clip_id`, `monologue_session_id`, `storage_path`, `mime_type`, `duration_sec`, `created_at` | 音声本体は Storage、ここはメタデータ。**独り言は保存せず、リプロダクションの聴き比べ録音のみ** |
+| `phrases` | `id`, `user_id`, `clip_id`, `text`, `meaning_ja`, `used_count`, `last_used_at`, `graduated_at`, `created_at` | **①と②を繋ぐ中核テーブル**。`graduated_at` が NULL の在庫だけが「今日使うフレーズ」に出る（初回使用で卒業） |
 | `daily_activity`（ビュー） | `user_id`, `activity_date`, `reproduction_reps`, `monologue_sec`, `recording_sec` | 継続トラッキング用。`security_invoker = on` で RLS を継承 |
 
 `monologue_topics` だけ SELECT ポリシーが `user_id is null or auth.uid() = user_id`（共通シードを全員が読む）。
 
 **Storage** — `recordings` バケット（非公開）。パスは `<user_id>/<kind>/<uuid>.<ext>`。
 `storage.foldername(name)[1] = auth.uid()` のポリシーで他人のフォルダに触れない。
-音声はクライアントから直接アップロードし、Server Action はメタデータ行だけ作る（Blob をサーバに通さない）。
+リプロダクションの録音（聴き比べ用）だけをクライアントから直接アップロードし、Server Action はメタデータ行だけ作る（Blob をサーバに通さない）。**独り言の録音は保存しない**（時間だけ `monologue_sessions.duration_sec` に残す）。
 
 ### Annotation 型
 
@@ -182,7 +182,7 @@ type Annotation = {
 }
 ```
 
-**transcript を編集したら annotations は破棄して再解析する。** オフセット追従はしない（UI でも明示している）。
+**transcript を編集したら annotations は surface（覆っていた部分文字列）で新テキストへ貼り直す**（`reanchorAnnotations`）。消えた記号だけ落として件数を通知する。オフセットの機械的な追従はしない。
 
 ---
 
@@ -206,6 +206,7 @@ type Annotation = {
 - `stop_reason === 'refusal'` を `content` を読む前に分岐し、422 で返す（`AiRefusalError`）
 - `fallbacks: 'default'`（beta `server-side-fallback-2026-07-01`）を既定で有効
 - システムプロンプト（`src/lib/ai/prompts.ts`）は `cache_control` でキャッシュする。**頻繁に編集するとキャッシュが無効化される**
+- `annotate` は文字インデックスではなく **quote（該当部分の逐語コピー）＋ occurrence（何番目か）** を返させ、サーバ側で文字列照合してオフセットを復元する（LLM の整数オフセット誤差を原理的に避ける）。`resolveAiAnnotations`（`src/lib/annotation-anchor.ts`）を経由し、最後に `normalizeAnnotations` を通す
 
 **音声認識は入れていない。** Claude API に音声入力はなく、Web Speech API は Chrome 限定で精度も不安定。
 元動画自身が「録音は聞き返すためではなく可視化のため」と言っているので、日本語メモ → AI 変換のほうが忠実で確実だと判断した。
@@ -272,7 +273,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 
 | 対象 | 理由 |
 |---|---|
-| **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済みだが、**AI が返す文字インデックスの正確さは動かさないと分からない** |
+| **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
 | **録音の実機保存**（Storage アップロード＋メタデータ行） | ヘッドレスブラウザにマイクがないため |
 | 実機のモバイル（iOS / Android）での動作 | 未実施 |
 

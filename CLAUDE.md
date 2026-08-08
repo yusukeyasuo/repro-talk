@@ -75,13 +75,14 @@ src/lib/activity.ts      連続日数・ヒートマップ（日付境界は Asi
 
 ## 設計上の注意
 
-- **annotations は transcript の文字インデックス参照**。transcript を編集したら記号は破棄して再解析する（オフセット追従はしない）
-- AI が返すインデックスはずれることがあるので `normalizeAnnotations()` を必ず通す
+- **annotations は transcript の文字インデックス参照**。transcript を編集したら、覆っていた部分文字列で新テキストへ貼り直す（`reanchorAnnotations`、`src/lib/annotation-anchor.ts`）。消えた記号だけ落とす。機械的なオフセット追従はしない
+- **AI 解析（annotate）は quote＋occurrence を返させ、サーバ側で文字列照合してオフセットを復元する**（`resolveAiAnnotations`）。LLM は整数オフセットが不安定なので index は信用しない。最後に `normalizeAnnotations()` を最終防波堤として必ず通す
+- リプロダクション回数は「1回再生して止める→**言えた**」のタップで数える（聴くだけ・ループは数えない）。**独り言の録音音声は保存しない**（時間だけ記録）。フレーズは**初回使用で卒業**して「今日使うフレーズ」から外れる
 - **iOS Safari の MediaRecorder は `audio/mp4`**。`isTypeSupported` で分岐済み。`audio/webm` 決め打ちにしない
 - **バックグラウンド録音は不可**。「1人電話」は Wake Lock で画面を保つ前提
 - **YouTube IFrame の `end` はループしない**。`requestAnimationFrame` で終端を監視して `seekTo`
 - **文字起こしの自動取得はしない**。公式API経路は塞がれており安定しない。「文字起こしを表示」からのコピペが正規動線
-- 録音音声はクライアントから直接 Storage にアップロードし、Server Action ではメタデータ行だけ作る
+- リプロダクションの録音（聴き比べ用）だけクライアントから直接 Storage にアップロードし、Server Action ではメタデータ行だけ作る。独り言の録音は上げない
 - **`getUserMedia` は応答が返らないことがある**。`useRecorder` は15秒でタイムアウトして理由を出す（無反応のボタンを残さない）
 - **`font-mono`（Geist Mono）に日本語グリフはない**。「3回」「1日」「30秒」のような単位は必ず `font-mono` の外に出す。中に入れると豆腐になる
 - 注釈ツールバーのボタンは `onMouseDown` で `preventDefault()` する。しないと mousedown で選択が解除され、onClick 時に範囲を失う

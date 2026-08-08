@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { extensionForMimeType, useRecorder, type RecordedClip } from '@/hooks/use-recorder';
+import { reanchorAnnotations } from '@/lib/annotation-anchor';
 import { createClient } from '@/lib/supabase/client';
 import { formatSeconds } from '@/lib/youtube';
 import { normalizeAnnotations, type Annotation } from '@/types/annotation';
@@ -53,6 +54,7 @@ export function Workspace({ clip, material, userId }: Props) {
   const [loop, setLoop] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [reps, setReps] = useState(0); // このセッションで数えた回数（表示・単調増加）
+  const [pendingRep, setPendingRep] = useState(false); // 終端に達し「言えた」の確認待ちか
   const savedRepsRef = useRef(0); // うち practice_logs に保存済みの数
   const [repSaveState, setRepSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [abRunning, setAbRunning] = useState(false);
@@ -104,8 +106,22 @@ export function Workspace({ clip, material, userId }: Props) {
       playSelf();
       return;
     }
+    // ループ再生は「聴くだけ」。1回再生して止めたときだけ、自分で言ってから
+    // 「言えた」で数える（リスニング回数ではなく再現した回数を測る）。
+    if (!loop) setPendingRep(true);
+  }
+
+  /** 「言えた」を押したときだけ回数を数える。 */
+  function confirmRep() {
+    setPendingRep(false);
     setReps((count) => count + 1);
     setRepSaveState('saving');
+  }
+
+  /** 数えずにもう一度お手本を再生する（終端でまた「言えた」待ちになる）。 */
+  function replayModel() {
+    setPendingRep(false);
+    playModel();
   }
 
   function startAb() {
@@ -134,6 +150,7 @@ export function Workspace({ clip, material, userId }: Props) {
     }
     // 録音中はお手本と被らないよう止める
     stopAb();
+    setPendingRep(false);
     playerRef.current?.pause();
     await recorder.start();
   }
@@ -233,12 +250,14 @@ export function Workspace({ clip, material, userId }: Props) {
   }, [dirty, persist]);
 
   function saveTranscript(next: string) {
+    // スクリプトが変わっても、記号は surface で新テキストへ貼り直す。
+    // 文が消えた記号だけ落とす（全消しにはしない）。和訳は全体依存なので破棄する。
+    const { annotations: reanchored, dropped } = reanchorAnnotations(annotations, transcript, next);
     startTransition(async () => {
-      // スクリプトが変わったら文字インデックスがずれるので記号は破棄する
       const result = await updateClip({
         id: clip.id,
         transcript: next,
-        annotations: [],
+        annotations: reanchored,
         translationJa: null,
       });
       if (!result.ok) {
@@ -246,10 +265,14 @@ export function Workspace({ clip, material, userId }: Props) {
         return;
       }
       setTranscript(next);
-      setAnnotations([]);
+      setAnnotations(reanchored);
       setTranslation('');
       setEditingTranscript(false);
-      toast.success('スクリプトを保存しました');
+      toast.success(
+        dropped > 0
+          ? `スクリプトを保存しました（${dropped}個の記号は文が変わったため外しました）`
+          : 'スクリプトを保存しました',
+      );
     });
   }
 
@@ -319,7 +342,17 @@ export function Workspace({ clip, material, userId }: Props) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={playing ? () => playerRef.current?.pause() : () => playModel()}>
+            <Button
+              size="sm"
+              onClick={
+                playing
+                  ? () => playerRef.current?.pause()
+                  : () => {
+                      setPendingRep(false);
+                      playModel();
+                    }
+              }
+            >
               {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
               {playing ? '止める' : loop ? 'ループ再生' : '1回再生して止める'}
             </Button>
@@ -399,30 +432,49 @@ export function Workspace({ clip, material, userId }: Props) {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 rounded-lg border p-4">
-          <div>
-            <p className="text-xs text-muted-foreground">今回のリプロダクション</p>
-            <p className="text-2xl">
-              <span className="font-mono tabular-nums">{reps}</span> 回
-            </p>
+        <div className="space-y-3 rounded-lg border p-4">
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground">今回のリプロダクション</p>
+              <p className="text-2xl">
+                <span className="font-mono tabular-nums">{reps}</span> 回
+              </p>
+            </div>
+            <div className="ml-auto">
+              {repSaveState === 'error' ? (
+                <Button size="sm" variant="outline" onClick={() => void flushReps()}>
+                  記録に失敗 · 再試行
+                </Button>
+              ) : repSaveState === 'saving' ? (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  記録中…
+                </span>
+              ) : repSaveState === 'saved' ? (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Check className="size-3.5" />
+                  記録済み
+                </span>
+              ) : null}
+            </div>
           </div>
-          <div className="ml-auto">
-            {repSaveState === 'error' ? (
-              <Button size="sm" variant="outline" onClick={() => void flushReps()}>
-                記録に失敗 · 再試行
+
+          {pendingRep ? (
+            <div className="flex items-center gap-2">
+              <Button size="sm" className="flex-1" onClick={confirmRep}>
+                <Check className="size-4" />
+                言えた
               </Button>
-            ) : repSaveState === 'saving' ? (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" />
-                記録中…
-              </span>
-            ) : repSaveState === 'saved' ? (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Check className="size-3.5" />
-                記録済み
-              </span>
-            ) : null}
-          </div>
+              <Button size="sm" variant="outline" onClick={replayModel}>
+                <Repeat className="size-4" />
+                もう一回
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              1文を再生して止めたら、自分で同じように言ってみて「言えた」を押します。聴くだけ・ループは数えません。
+            </p>
+          )}
         </div>
       </div>
 
