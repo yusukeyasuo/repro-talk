@@ -1,13 +1,13 @@
 'use client';
 
 import {
+  Check,
   Ear,
   Loader2,
   Mic,
   Pause,
   Play,
   Repeat,
-  Save,
   Square,
   Sparkles,
 } from 'lucide-react';
@@ -52,13 +52,16 @@ export function Workspace({ clip, material, userId }: Props) {
   const [rate, setRate] = useState<number>(1);
   const [loop, setLoop] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [repCount, setRepCount] = useState(0);
+  const [reps, setReps] = useState(0); // このセッションで数えた回数（表示・単調増加）
+  const savedRepsRef = useRef(0); // うち practice_logs に保存済みの数
+  const [repSaveState, setRepSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [abRunning, setAbRunning] = useState(false);
 
   const [recorded, setRecorded] = useState<RecordedClip | null>(null);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [pending, startTransition] = useTransition();
 
   const recorder = useRecorder();
@@ -74,14 +77,20 @@ export function Workspace({ clip, material, userId }: Props) {
     };
   }, [recorded]);
 
-  const playModel = useCallback(() => {
-    playerRef.current?.playRange(clip.start_sec, clip.end_sec, loop);
-  }, [clip.start_sec, clip.end_sec, loop]);
+  // once=true のときはループトグルを無視して必ず1回だけ再生する。
+  // 聴き比べ（お手本 → 自分 → お手本 …）ではお手本が区間の終端で止まらないと
+  // 録音に切り替わらないため、聴き比べ中は常に once で呼ぶ。
+  const playModel = useCallback(
+    ({ once = false }: { once?: boolean } = {}) => {
+      playerRef.current?.playRange(clip.start_sec, clip.end_sec, once ? false : loop);
+    },
+    [clip.start_sec, clip.end_sec, loop],
+  );
 
   const playSelf = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !recorded) {
-      if (abRef.current) playModel();
+      if (abRef.current) playModel({ once: true });
       return;
     }
     audio.currentTime = 0;
@@ -90,16 +99,21 @@ export function Workspace({ clip, material, userId }: Props) {
 
   /** お手本の区間が終わったとき。「1文再生 → 止める」がリプロダクションの要。 */
   function handleRangeEnd() {
-    setRepCount((count) => count + 1);
-    if (abRef.current) playSelf();
+    if (abRef.current) {
+      // 聴き比べ中はお手本 → 自分に渡すだけ。回数には数えない。
+      playSelf();
+      return;
+    }
+    setReps((count) => count + 1);
+    setRepSaveState('saving');
   }
 
   function startAb() {
     if (!recorded) return;
     abRef.current = true;
     setAbRunning(true);
-    // お手本 → 自分 → お手本 … を繰り返す
-    playerRef.current?.playRange(clip.start_sec, clip.end_sec, false);
+    // お手本 → 自分 → お手本 … を繰り返す。お手本は毎回1回だけ再生する。
+    playModel({ once: true });
   }
 
   function stopAb() {
@@ -178,23 +192,45 @@ export function Workspace({ clip, material, userId }: Props) {
     }
   }
 
-  function save() {
-    startTransition(async () => {
-      const result = await updateClip({
-        id: clip.id,
-        transcript,
-        translationJa: translation || null,
-        annotations,
-        memo: memo || null,
-      });
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      setDirty(false);
-      toast.success('保存しました');
+  // 自動保存：和訳・マーキング・メモ・AI解析結果が変わったら少し待って保存する。
+  // 手動保存を待たずに済むので、リロードしても STEP3 の作り込みが失われない。
+  const persist = useCallback(async () => {
+    setSaveState('saving');
+    const result = await updateClip({
+      id: clip.id,
+      transcript,
+      translationJa: translation || null,
+      annotations,
+      memo: memo || null,
     });
-  }
+    if (!result.ok) {
+      setSaveState('error');
+      toast.error(`保存に失敗しました: ${result.error}`);
+      return;
+    }
+    setDirty(false);
+    setSaveState('saved');
+  }, [clip.id, transcript, translation, annotations, memo]);
+
+  // dirty になったら debounce して自動保存（スクリプト編集中は別導線なので除く）
+  useEffect(() => {
+    if (!dirty || editingTranscript) return;
+    const timer = setTimeout(() => {
+      void persist();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [dirty, editingTranscript, persist]);
+
+  // タブを離れる/リロード直前に、未保存があれば即フラッシュする（debounce の取りこぼし対策）
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === 'hidden' && dirty) {
+        void persist();
+      }
+    };
+    document.addEventListener('visibilitychange', flush);
+    return () => document.removeEventListener('visibilitychange', flush);
+  }, [dirty, persist]);
 
   function saveTranscript(next: string) {
     startTransition(async () => {
@@ -217,18 +253,51 @@ export function Workspace({ clip, material, userId }: Props) {
     });
   }
 
-  function recordReps() {
-    if (repCount === 0) return;
-    startTransition(async () => {
-      const result = await logPractice({ clipId: clip.id, repCount });
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(`${repCount} 回を記録しました`);
-      setRepCount(0);
-    });
-  }
+  // リプロダクション回数の自動記録。押し忘れで回数が消えないよう、まだ保存していない分を
+  // practice_logs へ差分で書き込む（本数ぶんの行を作る。daily_activity ビューが日付ごとに合算する）。
+  const flushReps = useCallback(async () => {
+    const delta = reps - savedRepsRef.current;
+    if (delta <= 0) return;
+    setRepSaveState('saving');
+    savedRepsRef.current = reps; // 楽観的に進める
+    const result = await logPractice({ clipId: clip.id, repCount: delta });
+    if (!result.ok) {
+      savedRepsRef.current -= delta; // 失敗したら戻す
+      setRepSaveState('error');
+      toast.error(`記録に失敗しました: ${result.error}`);
+      return;
+    }
+    setRepSaveState('saved');
+  }, [reps, clip.id]);
+
+  // 再生が少し落ち着いたら自動記録する（debounce）
+  useEffect(() => {
+    if (reps <= savedRepsRef.current) return;
+    const timer = setTimeout(() => {
+      void flushReps();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [reps, flushReps]);
+
+  // タブを離れる/リロード直前に未記録があればフラッシュ
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === 'hidden') void flushReps();
+    };
+    document.addEventListener('visibilitychange', flush);
+    return () => document.removeEventListener('visibilitychange', flush);
+  }, [flushReps]);
+
+  // クリップ間の移動などアンマウント時にも未記録をフラッシュする
+  const flushRepsRef = useRef(flushReps);
+  useEffect(() => {
+    flushRepsRef.current = flushReps;
+  }, [flushReps]);
+  useEffect(() => {
+    return () => {
+      void flushRepsRef.current();
+    };
+  }, []);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
@@ -250,7 +319,7 @@ export function Workspace({ clip, material, userId }: Props) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={playing ? () => playerRef.current?.pause() : playModel}>
+            <Button size="sm" onClick={playing ? () => playerRef.current?.pause() : () => playModel()}>
               {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
               {playing ? '止める' : loop ? 'ループ再生' : '1回再生して止める'}
             </Button>
@@ -320,7 +389,7 @@ export function Workspace({ clip, material, userId }: Props) {
               controls
               className="w-full"
               onEnded={() => {
-                if (abRef.current) playModel();
+                if (abRef.current) playModel({ once: true });
               }}
             />
           )}
@@ -334,18 +403,26 @@ export function Workspace({ clip, material, userId }: Props) {
           <div>
             <p className="text-xs text-muted-foreground">今回のリプロダクション</p>
             <p className="text-2xl">
-              <span className="font-mono tabular-nums">{repCount}</span> 回
+              <span className="font-mono tabular-nums">{reps}</span> 回
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="ml-auto"
-            onClick={recordReps}
-            disabled={repCount === 0 || pending}
-          >
-            記録する
-          </Button>
+          <div className="ml-auto">
+            {repSaveState === 'error' ? (
+              <Button size="sm" variant="outline" onClick={() => void flushReps()}>
+                記録に失敗 · 再試行
+              </Button>
+            ) : repSaveState === 'saving' ? (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                記録中…
+              </span>
+            ) : repSaveState === 'saved' ? (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Check className="size-3.5" />
+                記録済み
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -366,12 +443,21 @@ export function Workspace({ clip, material, userId }: Props) {
                   {analyzing ? '解析中…' : 'AI で音を解析'}
                 </Button>
               )}
-              {dirty && (
-                <Button size="sm" onClick={save} disabled={pending}>
-                  <Save className="size-4" />
-                  保存
+              {saveState === 'error' ? (
+                <Button size="sm" variant="outline" onClick={() => void persist()}>
+                  保存に失敗 · 再試行
                 </Button>
-              )}
+              ) : dirty ? (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  保存中…
+                </span>
+              ) : saveState === 'saved' ? (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Check className="size-3.5" />
+                  保存済み
+                </span>
+              ) : null}
             </div>
           </div>
 
