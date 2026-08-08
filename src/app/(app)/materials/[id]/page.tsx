@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ClipCreator } from '@/components/material/clip-creator';
+import { DeleteClipButton } from '@/components/material/delete-clip-button';
 import { Badge } from '@/components/ui/badge';
 import { createClient } from '@/lib/supabase/server';
 import { formatSeconds, watchUrl } from '@/lib/youtube';
@@ -80,10 +81,10 @@ export default async function MaterialPage({
           ) : (
             <ul className="space-y-2">
               {typedClips.map((clip) => (
-                <li key={clip.id}>
+                <li key={clip.id} className="flex items-stretch gap-1">
                   <Link
                     href={`/clips/${clip.id}`}
-                    className="block rounded-lg border p-3 transition-colors hover:bg-accent/40"
+                    className="min-w-0 flex-1 rounded-lg border p-3 transition-colors hover:bg-accent/40"
                   >
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-mono tabular-nums">
@@ -103,6 +104,14 @@ export default async function MaterialPage({
                       {clip.label || clip.transcript || 'スクリプト未入力'}
                     </p>
                   </Link>
+                  <DeleteClipButton
+                    id={clip.id}
+                    materialId={typedMaterial.id}
+                    label={
+                      clip.label ||
+                      `${formatSeconds(clip.start_sec)}–${formatSeconds(clip.end_sec)}`
+                    }
+                  />
                 </li>
               ))}
             </ul>
