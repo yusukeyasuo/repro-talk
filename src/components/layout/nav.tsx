@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, Library, Mic, Quote, Settings } from 'lucide-react';
+import { BookOpen, Home, Library, Mic, Quote, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -11,6 +11,7 @@ const ITEMS = [
   { href: '/materials', label: '素材', icon: Library, exact: false },
   { href: '/monologue', label: '独り言', icon: Mic, exact: false },
   { href: '/phrases', label: 'フレーズ', icon: Quote, exact: false },
+  { href: '/guide', label: '使い方', icon: BookOpen, exact: false },
   { href: '/settings', label: '設定', icon: Settings, exact: false },
 ];
 
@@ -56,7 +57,7 @@ export function BottomNav() {
 
   return (
     <nav className="sticky bottom-0 z-30 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-      <ul className="grid grid-cols-5">
+      <ul className="grid grid-cols-6">
         {ITEMS.map(({ href, label, icon: Icon, exact }) => (
           <li key={href}>
             <Link
