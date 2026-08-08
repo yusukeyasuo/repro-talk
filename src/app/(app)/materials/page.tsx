@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { AddMaterialDialog } from '@/components/material/add-material-dialog';
+import { DeleteMaterialButton } from '@/components/material/delete-material-button';
 import { Badge } from '@/components/ui/badge';
 import { createClient } from '@/lib/supabase/server';
 import { MATERIAL_LEVELS, type Material } from '@/types/database';
@@ -56,7 +57,14 @@ export default async function MaterialsPage() {
               </div>
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((material) => (
-                  <li key={material.id}>
+                  <li key={material.id} className="relative">
+                    <div className="absolute right-2 top-2 z-10">
+                      <DeleteMaterialButton
+                        id={material.id}
+                        title={material.title}
+                        clipCount={clipCounts.get(material.id) ?? 0}
+                      />
+                    </div>
                     <Link
                       href={`/materials/${material.id}`}
                       className="group block overflow-hidden rounded-lg border transition-colors hover:bg-accent/40"

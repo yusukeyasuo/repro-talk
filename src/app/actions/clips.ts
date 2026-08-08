@@ -93,10 +93,22 @@ export async function deleteClip(input: {
   if (!user) return AUTH_REQUIRED;
 
   const supabase = await createClient();
+
+  // recordings 行はカスケードで消えるが、Storage の実ファイルは残るので先に消す
+  const { data: recs } = await supabase
+    .from('recordings')
+    .select('storage_path')
+    .eq('clip_id', input.id);
+  const paths = (recs ?? []).map((r) => r.storage_path).filter(Boolean);
+  if (paths.length > 0) {
+    await supabase.storage.from('recordings').remove(paths);
+  }
+
   const { error } = await supabase.from('clips').delete().eq('id', input.id);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/materials/${input.materialId}`);
+  revalidatePath('/');
   return { ok: true, data: undefined };
 }
 

@@ -49,9 +49,29 @@ export async function deleteMaterial(id: string): Promise<ActionResult> {
   if (!user) return AUTH_REQUIRED;
 
   const supabase = await createClient();
+
+  // 素材を消すとクリップ→録音メタはカスケードで消えるが、Storage の実ファイルは残る。
+  // 配下クリップの録音を先に集めて Storage から消す（ベストエフォート）。
+  const { data: clips } = await supabase
+    .from('clips')
+    .select('id')
+    .eq('material_id', id);
+  const clipIds = (clips ?? []).map((c) => c.id);
+  if (clipIds.length > 0) {
+    const { data: recs } = await supabase
+      .from('recordings')
+      .select('storage_path')
+      .in('clip_id', clipIds);
+    const paths = (recs ?? []).map((r) => r.storage_path).filter(Boolean);
+    if (paths.length > 0) {
+      await supabase.storage.from('recordings').remove(paths);
+    }
+  }
+
   const { error } = await supabase.from('materials').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/materials');
+  revalidatePath('/');
   return { ok: true, data: undefined };
 }
