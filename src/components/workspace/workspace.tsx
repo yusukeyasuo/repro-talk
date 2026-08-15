@@ -519,6 +519,9 @@ export function Workspace({ clip, material, userId }: Props) {
               onSave={saveTranscript}
               onCancel={transcript ? () => setEditingTranscript(false) : undefined}
               saving={pending}
+              startSec={clip.start_sec}
+              endSec={clip.end_sec}
+              youtubeVideoId={material.youtube_video_id}
             />
           ) : (
             <AnnotationEditor
