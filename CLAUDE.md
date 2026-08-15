@@ -81,7 +81,7 @@ src/lib/activity.ts      連続日数・ヒートマップ（日付境界は Asi
 - **iOS Safari の MediaRecorder は `audio/mp4`**。`isTypeSupported` で分岐済み。`audio/webm` 決め打ちにしない
 - **バックグラウンド録音は不可**。「1人電話」は Wake Lock で画面を保つ前提
 - **YouTube IFrame の `end` はループしない**。`requestAnimationFrame` で終端を監視して `seekTo`
-- **文字起こしの自動取得はしない**。公式API経路は塞がれており安定しない。「文字起こしを表示」からのコピペが正規動線
+- **サーバー側での文字起こし自動取得はしない**。timedtext 経路はデータセンターIP（Vercel）が強くブロックされ、ブラウザ直叩きは CORS で塞がっている。代わりに**ユーザーのブラウザで動くブックマークレット**（`src/lib/transcript-bookmarklet.ts`）が字幕を `m:ss テキスト` でクリップボードへ入れ、それを貼り付ける。手動コピペ（「文字起こしを表示」）もフォールバックとして残す。全文を貼っても clip の `[start, end)` で `trimTranscriptToRange` が区間に絞る
 - リプロダクションの録音（聴き比べ用）だけクライアントから直接 Storage にアップロードし、Server Action ではメタデータ行だけ作る。独り言の録音は上げない
 - **`getUserMedia` は応答が返らないことがある**。`useRecorder` は15秒でタイムアウトして理由を出す（無反応のボタンを残さない）
 - **`font-mono`（Geist Mono）に日本語グリフはない**。「3回」「1日」「30秒」のような単位は必ず `font-mono` の外に出す。中に入れると豆腐になる

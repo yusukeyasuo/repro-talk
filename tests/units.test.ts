@@ -3,7 +3,13 @@ import { describe, it } from 'node:test';
 
 import { calcStreak, buildHeatmap, shiftDate } from '../src/lib/activity.ts';
 import { isLocalSupabase, localMailboxUrl } from '../src/lib/local-dev.ts';
-import { cleanTranscript, splitSentences } from '../src/lib/transcript.ts';
+import {
+  cleanTranscript,
+  parseLeadingTimestampSeconds,
+  splitSentences,
+  trimTranscriptToRange,
+} from '../src/lib/transcript.ts';
+import { TRANSCRIPT_BOOKMARKLET_HREF } from '../src/lib/transcript-bookmarklet.ts';
 import { extractVideoId, formatDurationJa, formatSeconds } from '../src/lib/youtube.ts';
 import { normalizeAnnotations } from '../src/types/annotation.ts';
 import type { DailyActivity } from '../src/types/database.ts';
@@ -98,6 +104,75 @@ describe('transcript: 1文ずつ止める練習のために文へ分割する', 
 
   it('空文字は空配列', () => {
     assert.deepEqual(splitSentences(''), []);
+  });
+});
+
+describe('transcript: 行頭タイムスタンプを秒に変換する', () => {
+  it('m:ss と h:mm:ss', () => {
+    assert.equal(parseLeadingTimestampSeconds('0:05 hi'), 5);
+    assert.equal(parseLeadingTimestampSeconds('1:30 hi'), 90);
+    assert.equal(parseLeadingTimestampSeconds('1:02:03 hi'), 3723);
+  });
+
+  it('角括弧・丸括弧つき', () => {
+    assert.equal(parseLeadingTimestampSeconds('[00:12] hi'), 12);
+    assert.equal(parseLeadingTimestampSeconds('(2:00) hi'), 120);
+  });
+
+  it('タイムスタンプが無ければ null', () => {
+    assert.equal(parseLeadingTimestampSeconds('Good morning.'), null);
+    assert.equal(parseLeadingTimestampSeconds(''), null);
+  });
+});
+
+describe('transcript: 貼り付けた全文を clip の区間に絞る', () => {
+  // ブックマークレットが吐く形（動画全体の m:ss テキスト）
+  const full = [
+    '0:00 Intro line one.',
+    '0:03 Intro line two.',
+    '0:30 Good morning.',
+    '0:33 Incredibly, the cherry blossom',
+    '0:36 survived yet another storm.',
+    '1:00 Outro.',
+  ].join('\n');
+
+  it('[30, 60) に重なるキューだけ残して整形する', () => {
+    const result = trimTranscriptToRange(full, 30, 60);
+    assert.equal(result.hadTimestamps, true);
+    assert.equal(result.keptCues, 3);
+    assert.equal(
+      result.text,
+      'Good morning. Incredibly, the cherry blossom survived yet another storm.',
+    );
+  });
+
+  it('区間の開始をまたぐキューは取りこぼさない', () => {
+    // 開始 34 は 0:33 のキュー内。そのキューを含める
+    const result = trimTranscriptToRange(full, 34, 60);
+    assert.equal(result.keptCues, 2);
+    assert.equal(result.text, 'Incredibly, the cherry blossom survived yet another storm.');
+  });
+
+  it('該当が無ければ keptCues=0・空文字', () => {
+    const result = trimTranscriptToRange(full, 300, 360);
+    assert.equal(result.hadTimestamps, true);
+    assert.equal(result.keptCues, 0);
+    assert.equal(result.text, '');
+  });
+
+  it('タイムスタンプが無ければ整形だけして hadTimestamps=false', () => {
+    const result = trimTranscriptToRange('Good morning. Incredibly the storm.', 0, 30);
+    assert.equal(result.hadTimestamps, false);
+    assert.equal(result.text, 'Good morning. Incredibly the storm.');
+  });
+});
+
+describe('transcript-bookmarklet: 生成される javascript: URL', () => {
+  it('javascript: で始まり本体が埋め込まれている', () => {
+    assert.ok(TRANSCRIPT_BOOKMARKLET_HREF.startsWith('javascript:'));
+    // ミニファイ／DCE で本体が落ちていないことの番人
+    assert.match(TRANSCRIPT_BOOKMARKLET_HREF, /captionTracks/);
+    assert.match(TRANSCRIPT_BOOKMARKLET_HREF, /ytd-transcript-segment-renderer/);
   });
 });
 
