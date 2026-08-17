@@ -153,7 +153,7 @@ function ImportCsvDialog({ courseId }: { courseId: string }) {
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>CSVで一括登録</DialogTitle>
           <DialogDescription>
@@ -169,7 +169,9 @@ function ImportCsvDialog({ courseId }: { courseId: string }) {
             onChange={(e) => setText(e.target.value)}
             rows={8}
             placeholder={'なるほど、理解しました。,"I see, that makes sense."\n一旦これで進めましょう。,Let\'s go with this for now.'}
-            className="font-mono text-xs"
+            // field-sizing-content で内容ぶん伸びるので、上限を切って内部スクロールにする
+            // （伸びきってフッターのボタンが画面外に出るのを防ぐ）
+            className="max-h-64 resize-none overflow-y-auto font-mono text-xs"
           />
           <div className="flex items-center justify-between gap-3">
             <label className="cursor-pointer text-xs text-muted-foreground underline">
