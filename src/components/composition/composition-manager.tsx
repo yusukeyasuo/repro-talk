@@ -1,8 +1,8 @@
 'use client';
 
-import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
+import { Pencil, Plus, Square, Trash2, Upload, Volume2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -23,7 +23,9 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useTts } from '@/hooks/use-tts';
 import { parseCompositionsCsv } from '@/lib/composition-csv';
+import { cn } from '@/lib/utils';
 import type { Composition } from '@/types/database';
 
 export function CompositionManager({
@@ -33,6 +35,45 @@ export function CompositionManager({
   courseId: string;
   compositions: Composition[];
 }) {
+  const tts = useTts('en-US');
+  const [playingId, setPlayingId] = useState<string | null>(null);
+
+  // 一覧を離れる（＝プレイヤーへ切替 / 別ページ）ときは読み上げを止める
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  function play(composition: Composition) {
+    // 同じ行をもう一度押したら停止
+    if (playingId === composition.id) {
+      tts.cancel();
+      setPlayingId(null);
+      return;
+    }
+    const speakIt = () => {
+      setPlayingId(composition.id);
+      tts.speak(composition.en, {
+        onend: () => setPlayingId((cur) => (cur === composition.id ? null : cur)),
+      });
+    };
+    const speaking =
+      typeof window !== 'undefined' &&
+      'speechSynthesis' in window &&
+      window.speechSynthesis.speaking;
+    if (speaking) {
+      // 再生中を止めてから。cancel() 直後の speak() は Chrome が握り潰すので一拍おく
+      tts.cancel();
+      window.setTimeout(speakIt, 60);
+    } else {
+      // 何も鳴っていなければ、ユーザー操作の中で即発話（iOS 対策）
+      speakIt();
+    }
+  }
+
   return (
     <div className="space-y-5">
       <AddCompositionForm courseId={courseId} />
@@ -51,7 +92,13 @@ export function CompositionManager({
       ) : (
         <ul className="space-y-2">
           {compositions.map((c) => (
-            <CompositionRow key={c.id} composition={c} />
+            <CompositionRow
+              key={c.id}
+              composition={c}
+              canPlay={tts.supported}
+              playing={playingId === c.id}
+              onPlay={() => play(c)}
+            />
           ))}
         </ul>
       )}
@@ -208,7 +255,17 @@ function ImportCsvDialog({ courseId }: { courseId: string }) {
   );
 }
 
-function CompositionRow({ composition }: { composition: Composition }) {
+function CompositionRow({
+  composition,
+  canPlay,
+  playing,
+  onPlay,
+}: {
+  composition: Composition;
+  canPlay: boolean;
+  playing: boolean;
+  onPlay: () => void;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -226,6 +283,20 @@ function CompositionRow({ composition }: { composition: Composition }) {
 
   return (
     <li className="flex items-start gap-2 rounded-lg border p-3">
+      {canPlay && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onPlay}
+          aria-label={playing ? '読み上げを止める' : '読み上げる'}
+          className={cn(
+            'shrink-0 self-center text-muted-foreground hover:text-foreground',
+            playing && 'text-foreground',
+          )}
+        >
+          {playing ? <Square className="animate-pulse" /> : <Volume2 />}
+        </Button>
+      )}
       <div className="min-w-0 flex-1">
         <p className="text-sm">{composition.ja}</p>
         <p className="mt-0.5 font-mono text-xs text-muted-foreground">{composition.en}</p>
