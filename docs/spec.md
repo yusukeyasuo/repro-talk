@@ -309,7 +309,9 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | A-Bループの終端検知 → 回数カウント → `practice_logs` 記録 | 通過 |
 | フレーズをタップ → `used_count` 加算 | 通過（①→②の受け渡し） |
 | プロフィール保存とダッシュボードへの反映 | 通過 |
-| ビルド / Lint / ユニットテスト20件 | 全通過 |
+| **瞬間英作文のマイグレーション0004**（3テーブル・全RLS・FK・`daily_activity` へ `composition_reps` 追加） | ローカルへ適用を確認。`compositions` は course 削除で cascade、`composition_logs.course_id` は set null |
+| **瞬間英作文のビュー集計**（`composition_logs` → `daily_activity.composition_reps`、JST 日付境界） | 実データ1件で 7 回が集計されること、コース削除後も log が `course_id=null` で残る（連続日数を巻き戻さない）ことを確認 |
+| ビルド / Lint / ユニットテスト49件 | 全通過（CSV/TSV パース・瞬間英作文の連続日数/ヒートマップを追加） |
 
 ### 未検証
 
@@ -317,16 +319,17 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 |---|---|
 | **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
 | **録音の実機保存**（Storage アップロード＋メタデータ行） | ヘッドレスブラウザにマイクがないため |
-| **瞬間英作文（コース・例文・CSV・プレイヤー・TTS・継続反映）** | 本節は今回追記した仕様で、**まだ未実装**。マイグレーション（`composition_courses` / `compositions` / `composition_logs`、`daily_activity` への `composition_reps` 追加）・画面・Server Action・`activity.ts` の `hasActivity` 拡張はこれから |
+| **瞬間英作文の画面フロー**（コース作成→例文追加→CSV一括登録→プレイヤーで読み上げ→回数記録） | 実装済み・ビルド/型/Lint は通過。ただしブラウザでの通し操作（ログイン状態）は未実施。Server Action の RLS・revalidate はコード上のみ確認 |
+| **プレイヤーの TTS 実機動作**（`speechSynthesis` の発話・iOS 解錠・声の非同期ロード・`onend` 送り） | ヘッドレスでは音が出ないため未検証。端末（特に iOS Safari）での確認が必要 |
 | 実機のモバイル（iOS / Android）での動作 | 未実施 |
 
 ### テスト
 
-`npm test` は `node:test` で `tests/*.test.ts` を実行する（20件）。
+`npm test` は `node:test` で `tests/*.test.ts` を実行する（49件）。
 外部依存のないロジックだけを対象にしている。
 
 - 文字起こしの整形（タイムスタンプ除去、文分割とオフセットの一致）
 - 注釈の正規化（範囲外・空範囲・未知種別・重複IDの排除）
-- 連続日数とヒートマップ（月・年またぎ、今日未着手の扱い）
+- 連続日数とヒートマップ（月・年またぎ、今日未着手の扱い、瞬間英作文だけの日）
 - YouTube URL の解釈（各種形式、不正入力）
-- CSV／TSV の一括登録パース（クオート・カンマ・タブ・ヘッダー有無）※瞬間英作文の実装時に追加
+- CSV／TSV の一括登録パース（クオート・カンマ・タブ・ヘッダー有無・改行/CRLF/BOM）

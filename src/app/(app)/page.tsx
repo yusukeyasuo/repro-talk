@@ -1,4 +1,4 @@
-import { ArrowRight, Flame, Mic, Repeat2 } from 'lucide-react';
+import { ArrowRight, Flame, Mic, Repeat2, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -46,6 +46,7 @@ export default async function DashboardPage() {
   const weekRows = rows.filter((row) => row.activity_date >= weekStart);
   const weekMonologueSec = weekRows.reduce((sum, row) => sum + row.monologue_sec, 0);
   const weekReps = weekRows.reduce((sum, row) => sum + row.reproduction_reps, 0);
+  const weekCompositionReps = weekRows.reduce((sum, row) => sum + row.composition_reps, 0);
 
   const why = (profile as Profile | null)?.why_text;
   const goalSec = (profile as Profile | null)?.daily_goal_sec ?? 60;
@@ -66,6 +67,8 @@ export default async function DashboardPage() {
 
   const reproDone = (todayRow?.reproduction_reps ?? 0) > 0;
   const monologueDone = (todayRow?.monologue_sec ?? 0) >= goalSec;
+  const todayCompositionReps = todayRow?.composition_reps ?? 0;
+  const compositionDone = todayCompositionReps > 0;
 
   return (
     <div className="space-y-8">
@@ -90,7 +93,7 @@ export default async function DashboardPage() {
       {/* 今日やること */}
       <section className="space-y-3">
         <h2 className="text-sm font-medium">今日やること</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <Link
             href={reproHref}
             className="group rounded-xl border p-5 transition-colors hover:bg-accent/40"
@@ -123,13 +126,30 @@ export default async function DashboardPage() {
               {formatDurationJa(goalSec)}
             </p>
           </Link>
+
+          <Link
+            href="/compositions"
+            className="group rounded-xl border p-5 transition-colors hover:bg-accent/40"
+          >
+            <div className="flex items-center gap-2">
+              <Zap className="size-4" />
+              <span className="text-sm font-medium">瞬間英作文</span>
+              {compositionDone && <Badge variant="secondary" className="ml-auto">今日済み</Badge>}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              日本語を見た瞬間に英語を。コースを選んで流す。
+            </p>
+            <p className="mt-2 text-sm">
+              今日 <span className="font-mono tabular-nums">{todayCompositionReps}</span> 回
+            </p>
+          </Link>
         </div>
       </section>
 
       {/* 記録 */}
       <section className="space-y-4">
         <h2 className="text-sm font-medium">続いている記録</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border p-4">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Flame className="size-3.5" />
@@ -147,6 +167,12 @@ export default async function DashboardPage() {
             <p className="text-xs text-muted-foreground">今週のリプロダクション</p>
             <p className="mt-1 text-2xl">
               <span className="font-mono tabular-nums">{weekReps}</span> 回
+            </p>
+          </div>
+          <div className="rounded-xl border p-4">
+            <p className="text-xs text-muted-foreground">今週の瞬間英作文</p>
+            <p className="mt-1 text-2xl">
+              <span className="font-mono tabular-nums">{weekCompositionReps}</span> 回
             </p>
           </div>
         </div>
