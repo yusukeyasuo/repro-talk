@@ -76,6 +76,9 @@ export function CompositionPlayer({
 
   // 起動時：iOS 解錠 ＋ Wake Lock
   useEffect(() => {
+    // StrictMode（dev）はマウントを2回走らせ、間の cleanup で flush() が走って
+    // flushedRef が立ってしまう。マウントのたびに戻して本番の記録を落とさない。
+    flushedRef.current = false;
     tts.unlock();
     void wakeLock.request();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -126,8 +129,9 @@ export function CompositionPlayer({
             goNext();
           };
           tts.speak(en, { onend: advance });
-          // onend が来ない環境向けの保険（文字数から粗く見積もった上限で必ず送る）
-          const safetyMs = Math.min(15000, Math.max(ANSWER_HOLD_MS, en.length * 90));
+          // onend が来ない/遅い環境向けの保険。読み上げを途中で切らないよう長めに見積もる
+          // （英語 TTS は概ね 12〜15 字/秒。onend が来れば即送りなのでこれは上限）。
+          const safetyMs = Math.min(20000, Math.max(4000, en.length * 110));
           timerRef.current = setTimeout(advance, safetyMs);
         } else {
           timerRef.current = setTimeout(goNext, ANSWER_HOLD_MS);

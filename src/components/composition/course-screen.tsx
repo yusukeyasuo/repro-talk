@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { deleteCourse, updateCourse } from '@/app/actions/compositions';
 import { CompositionManager } from '@/components/composition/composition-manager';
 import { CompositionPlayer, type PlayOrder } from '@/components/composition/composition-player';
+import { primeSpeech } from '@/hooks/use-tts';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -163,7 +164,16 @@ export function CourseScreen({
           </p>
         </div>
 
-        <Button size="lg" className="w-full" onClick={() => setMode('play')} disabled={empty}>
+        <Button
+          size="lg"
+          className="w-full"
+          onClick={() => {
+            // 音声合成の解錠は必ずユーザー操作の中で（iOS 対策）。ここが gesture の起点。
+            primeSpeech();
+            setMode('play');
+          }}
+          disabled={empty}
+        >
           <Play className="size-5" />
           スタート
         </Button>

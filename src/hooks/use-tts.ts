@@ -13,6 +13,22 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   スタート押下時に呼び、無音の発話で一度解錠する
  * - 非対応環境では `speak()` が即 `onend` を呼ぶ（呼び出し側が固定秒送りにできる）
  */
+/**
+ * 音声合成エンジンを起こす（＝解錠）。ユーザー操作の中で一度呼ぶと iOS でも発話できる。
+ * 無音の1発話を投げるだけ。対応していれば true。
+ */
+export function primeSpeech(): boolean {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+  try {
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function useTts(lang = 'en-US') {
   // SSR とのハイドレーション差分を避けるため、初期値は true にして effect で判定する
   const [supported, setSupported] = useState(true);
@@ -39,17 +55,7 @@ export function useTts(lang = 'en-US') {
   // 非対応の確定は effect ではなくコールバックで行う（effect 内 setState を避ける）。
   // unlock() はプレイヤーがマウント時に呼ぶので、最初の読み上げ前に supported が確定する。
   const unlock = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      setSupported(false);
-      return;
-    }
-    try {
-      const u = new SpeechSynthesisUtterance(' ');
-      u.volume = 0;
-      window.speechSynthesis.speak(u);
-    } catch {
-      // 解錠に失敗しても本編の speak() で改めて試す
-    }
+    if (!primeSpeech()) setSupported(false);
   }, []);
 
   const speak = useCallback(
@@ -60,7 +66,6 @@ export function useTts(lang = 'en-US') {
         return;
       }
       const synth = window.speechSynthesis;
-      synth.cancel(); // 残っている発話を止める
       const u = new SpeechSynthesisUtterance(text);
       u.lang = lang;
       if (voiceRef.current) u.voice = voiceRef.current;
@@ -74,7 +79,16 @@ export function useTts(lang = 'en-US') {
       };
       u.onend = finish;
       u.onerror = finish; // エラーでも次へ進める（詰まらせない）
+
+      // 前の発話は goNext / アンマウント側で cancel 済み。ここでは cancel しない
+      // （Chrome は cancel() 直後の speak() を握り潰すことがあるため）。
       synth.speak(u);
+      // Chrome は一時停止状態のまま無音になることがあるので resume で起こす
+      try {
+        synth.resume();
+      } catch {
+        // resume 非対応でも speak 済み
+      }
     },
     [lang],
   );
