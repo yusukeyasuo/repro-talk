@@ -288,7 +288,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | `font-mono`（Geist Mono）に日本語グリフがない | 「3回」「1日」「30秒」の単位は `font-mono` の外に出す。中に入れると豆腐になる |
 | 選択範囲はボタンの mousedown で解除される | 注釈ツールバーは `onMouseDown` で `preventDefault()` する |
 | 音声読み上げ（TTS）はブラウザ差が大きい | `speechSynthesis`。声は非同期ロード（`onvoiceschanged` を待つ）。iOS Safari は発話にユーザー操作の連鎖が要る（スタート時に無音発話で解錠）。非対応環境は固定秒送りにフォールバック |
-| `speechSynthesis` は `cancel()` の多用でエンジンが固まる | 固まると**ブラウザ再起動まで無音**になる（voice はあるのに `start` が来ない）。cancel は割り込み時のみに絞り、`cancel()`→即 `speak()` はしない。復帰用に「声のテスト」ボタンを用意 |
+| `speechSynthesis` は使ううちにエンジンが固まる（無音化） | 固まると voice はあるのに `start` が来ない。対策：cancel は割り込み時のみ／`cancel()`→即 `speak()` はしない／発話中は `resume()` の **keepalive**（8秒毎）で起こし続ける／**固着ウォッチドッグ**（`onstart` が来なければ resume で蘇生、続くなら再読み込みを1回案内）／「声のテスト」ボタン。これでも足りなければ**クラウドTTS＋`<audio>`再生**へ切替予定（`speechSynthesis` を使わず固着ゼロにする） |
 | CSV の文にカンマ・引用符が混じる | 例文がカンマを含む前提で RFC4180 パースし、タブ区切りも受ける。自前パーサをユニットテスト対象にする |
 
 ---
