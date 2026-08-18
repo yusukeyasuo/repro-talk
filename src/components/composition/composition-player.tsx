@@ -9,26 +9,19 @@ import { useTts } from '@/hooks/use-tts';
 import { useWakeLock } from '@/hooks/use-wake-lock';
 import type { Composition } from '@/types/database';
 
-export type PlayOrder = 'seq' | 'random';
+export type PlayProgress = { index: number; finished: boolean };
 
 type Props = {
   courseId: string;
   courseTitle: string;
-  compositions: Composition[];
-  order: PlayOrder;
+  /** すでに順番解決済みの再生列（登録順 or シャッフル済み） */
+  sequence: Composition[];
+  /** 続きから開始する位置（0 で最初から） */
+  startIndex: number;
   intervalSec: number;
-  onExit: () => void;
+  /** ×／完了で抜けるとき、次に再開すべき位置を渡す */
+  onExit: (progress: PlayProgress) => void;
 };
-
-/** Fisher-Yates。ランダム順はプレイヤー内だけで使う（決定性は要らない領域）。 */
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
 
 // TTS 非対応環境で答えを見せておく固定時間
 const ANSWER_HOLD_MS = 3500;
@@ -36,27 +29,27 @@ const ANSWER_HOLD_MS = 3500;
 export function CompositionPlayer({
   courseId,
   courseTitle,
-  compositions,
-  order,
+  sequence,
+  startIndex,
   intervalSec,
   onExit,
 }: Props) {
   const tts = useTts('en-US');
   const wakeLock = useWakeLock();
 
-  // 開始時に一度だけ並びを固定する
-  const [list] = useState(() => (order === 'random' ? shuffle(compositions) : compositions));
-  const [index, setIndex] = useState(0);
+  const total = sequence.length;
+  const thinkMs = Math.max(3, intervalSec) * 1000;
+
+  const [index, setIndex] = useState(() =>
+    Math.min(Math.max(0, startIndex), Math.max(0, total - 1)),
+  );
   const [revealed, setRevealed] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [doneCount, setDoneCount] = useState(0); // 完了画面用（ref を render で読まない）
+  const [doneThisRound, setDoneThisRound] = useState(0);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const repsRef = useRef(0); // 読み上げ済み文数
-  const flushedRef = useRef(false); // 二重記録の防止
 
-  const total = list.length;
-  const current = list[index];
+  const current = sequence[index];
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -65,81 +58,69 @@ export function CompositionPlayer({
     }
   }, []);
 
-  // run 終了・途中離脱のどちらでも、読み上げた数をまとめて記録する
-  const flush = useCallback(() => {
-    if (flushedRef.current) return;
-    flushedRef.current = true;
-    if (repsRef.current > 0) {
-      void logCompositionReps({ courseId, repCount: repsRef.current });
-    }
-  }, [courseId]);
-
-  // 起動時：iOS 解錠 ＋ Wake Lock
+  // 起動時：解錠（gesture 直後にもう一度）＋ Wake Lock
   useEffect(() => {
-    // StrictMode（dev）はマウントを2回走らせ、間の cleanup で flush() が走って
-    // flushedRef が立ってしまう。マウントのたびに戻して本番の記録を落とさない。
-    flushedRef.current = false;
     tts.unlock();
     void wakeLock.request();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // アンマウント時（＝途中離脱を含む）に必ず後始末と記録
+  // アンマウント時の後始末
   useEffect(() => {
     return () => {
       clearTimer();
       tts.cancel();
       void wakeLock.release();
-      flush();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const goNext = useCallback(() => {
     clearTimer();
-    tts.cancel();
+    // 自然終了（onend）で来たときは speaking=false なので cancel しない。
+    // 割り込み（次へ／保険タイマー）で発話中のときだけ止める。無駄な cancel はスタックの元。
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const s = window.speechSynthesis;
+      if (s.speaking || s.pending) s.cancel();
+    }
     if (index + 1 >= total) {
       setFinished(true);
-      setDoneCount(repsRef.current);
       void wakeLock.release();
-      flush();
     } else {
       setRevealed(false);
       setIndex(index + 1);
     }
-  }, [index, total, clearTimer, tts, wakeLock, flush]);
+  }, [index, total, clearTimer, wakeLock]);
 
-  // 1文ぶんのサイクル：考える時間 → 答え表示＋読み上げ → 次へ
+  // 1文サイクル：考える時間 → 答え表示＋読み上げ＋カウント → 次へ
   useEffect(() => {
     if (finished || total === 0) return;
-    // revealed は各遷移（goNext / restart / 初期値）で false 済みなので、ここでは触らない
+    // revealed は各遷移（goNext / restart / 初期値）で false 済み。ここでは触らない。
     clearTimer();
 
-    timerRef.current = setTimeout(
-      () => {
-        setRevealed(true);
-        repsRef.current += 1;
-        const en = list[index]?.en ?? '';
+    const reveal = () => {
+      setRevealed(true);
+      setDoneThisRound((n) => n + 1);
+      // 1文再生 = 1回完了。都度サーバへ記録するので、途中で止めても数が残る。
+      void logCompositionReps({ courseId, repCount: 1 });
 
-        if (tts.supported) {
-          let advanced = false;
-          const advance = () => {
-            if (advanced) return;
-            advanced = true;
-            goNext();
-          };
-          tts.speak(en, { onend: advance });
-          // onend が来ない/遅い環境向けの保険。読み上げを途中で切らないよう長めに見積もる
-          // （英語 TTS は概ね 12〜15 字/秒。onend が来れば即送りなのでこれは上限）。
-          const safetyMs = Math.min(20000, Math.max(4000, en.length * 110));
-          timerRef.current = setTimeout(advance, safetyMs);
-        } else {
-          timerRef.current = setTimeout(goNext, ANSWER_HOLD_MS);
-        }
-      },
-      Math.max(3, intervalSec) * 1000,
-    );
+      const en = sequence[index]?.en ?? '';
+      if (tts.supported) {
+        let advanced = false;
+        const advance = () => {
+          if (advanced) return;
+          advanced = true;
+          goNext();
+        };
+        tts.speak(en, { onend: advance });
+        const safetyMs = Math.min(20000, Math.max(4000, en.length * 110));
+        timerRef.current = setTimeout(advance, safetyMs);
+      } else {
+        timerRef.current = setTimeout(goNext, ANSWER_HOLD_MS);
+      }
+    };
 
+    timerRef.current = setTimeout(reveal, thinkMs);
     return clearTimer;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, finished, tts.supported]);
@@ -147,16 +128,22 @@ export function CompositionPlayer({
   function restart() {
     clearTimer();
     tts.cancel();
-    flushedRef.current = false;
-    repsRef.current = 0;
-    setDoneCount(0);
+    setDoneThisRound(0);
     setFinished(false);
     setRevealed(false);
     setIndex(0);
     void wakeLock.request();
   }
 
-  const progress = total === 0 ? 0 : Math.round(((index + (revealed ? 1 : 0)) / total) * 100);
+  function exitNow() {
+    clearTimer();
+    tts.cancel();
+    // 次に再開すべき位置：答えを見た文は完了とみなして次へ、まだなら現在位置。
+    const next = finished ? total : revealed ? index + 1 : index;
+    onExit({ index: next, finished });
+  }
+
+  const overall = total === 0 ? 0 : Math.round(((index + (revealed ? 1 : 0)) / total) * 100);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -165,22 +152,23 @@ export function CompositionPlayer({
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{courseTitle}</p>
           <p className="text-xs text-muted-foreground">
-            <span className="font-mono tabular-nums">
-              {Math.min(index + 1, total)}
-            </span>{' '}
-            / <span className="font-mono tabular-nums">{total}</span>
+            <span className="font-mono tabular-nums">{Math.min(index + 1, total)}</span> /{' '}
+            <span className="font-mono tabular-nums">{total}</span>
+            <span className="ml-2">
+              完了 <span className="font-mono tabular-nums">{doneThisRound}</span>
+            </span>
           </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={onExit} aria-label="やめる">
+        <Button variant="ghost" size="icon" onClick={exitNow} aria-label="止めて終了">
           <X className="size-5" />
         </Button>
       </div>
 
-      {/* 進捗バー */}
+      {/* 全体進捗 */}
       <div className="h-1 w-full bg-muted">
         <div
           className="h-full bg-foreground transition-[width] duration-300"
-          style={{ width: `${progress}%` }}
+          style={{ width: `${overall}%` }}
         />
       </div>
 
@@ -193,7 +181,7 @@ export function CompositionPlayer({
           <div>
             <p className="text-lg font-medium">1周おつかれさまでした</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              <span className="font-mono tabular-nums">{doneCount}</span> 文を声に出しました。
+              <span className="font-mono tabular-nums">{doneThisRound}</span> 文を声に出しました。
             </p>
           </div>
           <div className="flex gap-3">
@@ -201,7 +189,7 @@ export function CompositionPlayer({
               <RotateCcw className="size-4" />
               もう一周
             </Button>
-            <Button onClick={onExit}>一覧に戻る</Button>
+            <Button onClick={exitNow}>一覧に戻る</Button>
           </div>
         </div>
       ) : (
@@ -214,22 +202,28 @@ export function CompositionPlayer({
           {/* 日本語（font-mono に入れない＝豆腐対策） */}
           <p className="max-w-2xl text-2xl leading-relaxed sm:text-3xl">{current?.ja}</p>
 
-          {/* 答え（英語） */}
-          <div className="min-h-[3.5rem]">
+          {/* 考える時間ゲージ / 答え */}
+          <div className="flex min-h-[4rem] w-full max-w-md flex-col items-center gap-2">
             {revealed ? (
-              <p className="max-w-2xl font-mono text-xl text-foreground sm:text-2xl">
-                {current?.en}
-              </p>
+              <p className="font-mono text-xl text-foreground sm:text-2xl">{current?.en}</p>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                声に出してから、答えを待つ
-              </p>
+              <>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  {/* key で文が変わるたびにアニメーションを頭から流し直す */}
+                  <div
+                    key={index}
+                    className="h-full origin-left rounded-full bg-foreground"
+                    style={{ animation: `composition-drain ${thinkMs}ms linear forwards` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">考える時間</p>
+              </>
             )}
           </div>
         </button>
       )}
 
-      {/* フッター操作 */}
+      {/* フッター */}
       {!finished && (
         <div className="flex items-center justify-between gap-3 border-t px-4 py-3">
           <p className="text-xs text-muted-foreground">

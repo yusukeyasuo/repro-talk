@@ -129,3 +129,13 @@
     @apply font-sans;
   }
 }
+
+/* 瞬間英作文プレイヤーの「考える時間」ゲージ。左詰めで幅が減っていく。 */
+@keyframes composition-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}

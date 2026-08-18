@@ -215,7 +215,11 @@ export async function importCompositions(input: {
 
 // --- 読み上げ回数の記録 ---------------------------------------------------
 
-/** 1周（または途中離脱）で読み上げた文数をまとめて記録する。回数の可視化が目的。 */
+/**
+ * 読み上げ回数を記録する。1文再生 = 1回として、プレイヤーが都度（repCount:1）呼ぶ。
+ * 途中で止めても、そこまで再生した文数が残る。ダッシュボード（/）は force-dynamic なので
+ * revalidate は不要（毎回 daily_activity を引き直す）。
+ */
 export async function logCompositionReps(input: {
   courseId: string;
   repCount: number;
@@ -233,6 +237,5 @@ export async function logCompositionReps(input: {
 
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath('/');
   return { ok: true, data: undefined };
 }

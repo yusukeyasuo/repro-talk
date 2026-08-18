@@ -3,23 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * 瞬間英作文の答えを読み上げる。ブラウザ標準の音声合成（Web Speech Synthesis）を使う。
- * これは音声「合成」（TTS）で、避けた音声「認識」（STT）とは別物。無料・鍵不要で、
- * iOS Safari を含め広く使える（声質は OS 依存）。
- *
- * 罠への対応：
- * - 声は非同期にロードされる（`voiceschanged` を待って選び直す）
- * - iOS は最初の発話をユーザー操作の連鎖内で起こさないとブロックする → `unlock()` を
- *   スタート押下時に呼び、無音の発話で一度解錠する
- * - 非対応環境では `speak()` が即 `onend` を呼ぶ（呼び出し側が固定秒送りにできる）
- */
-/**
  * 音声合成エンジンを起こす（＝解錠）。ユーザー操作の中で一度呼ぶと iOS でも発話できる。
  * 無音の1発話を投げるだけ。対応していれば true。
  */
 export function primeSpeech(): boolean {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
   try {
+    // 無音の1発話で解錠する。cancel()/resume() は Chrome を固まらせる誘因になり得るので呼ばない。
     const u = new SpeechSynthesisUtterance(' ');
     u.volume = 0;
     window.speechSynthesis.speak(u);
@@ -29,6 +19,12 @@ export function primeSpeech(): boolean {
   }
 }
 
+/**
+ * 瞬間英作文の答えを読み上げる。ブラウザ標準の音声合成（Web Speech Synthesis, = TTS）を使う。
+ * 声は非同期ロード（`voiceschanged` を待つ）／iOS はユーザー操作起点でないと発話がブロックされる
+ * （`unlock()` で解錠）／非対応環境では `speak()` が即 `onend` を呼ぶ（固定秒送りにできる）。
+ * cancel() の多用は Chrome の音声エンジンを固まらせる誘因になるため最小限にする。
+ */
 export function useTts(lang = 'en-US') {
   // SSR とのハイドレーション差分を避けるため、初期値は true にして effect で判定する
   const [supported, setSupported] = useState(true);
@@ -80,14 +76,14 @@ export function useTts(lang = 'en-US') {
       u.onend = finish;
       u.onerror = finish; // エラーでも次へ進める（詰まらせない）
 
-      // 前の発話は goNext / アンマウント側で cancel 済み。ここでは cancel しない
+      // 前の発話は goNext / アンマウント側で（必要なときだけ）止めている。ここでは cancel しない
       // （Chrome は cancel() 直後の speak() を握り潰すことがあるため）。
       synth.speak(u);
       // Chrome は一時停止状態のまま無音になることがあるので resume で起こす
       try {
         synth.resume();
       } catch {
-        // resume 非対応でも speak 済み
+        // 非対応でも speak 済み
       }
     },
     [lang],
