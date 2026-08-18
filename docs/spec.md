@@ -15,6 +15,8 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 
 そして、①で入れた表現を②で口から出せたときに両者が繋がる。アプリはこの3つをそのまま3本の導線にしている。
 
+さらに、元動画の「必要なのは2つ」には**含まれない**補助輪として、森沢洋介式の**瞬間英作文**ドリルを足した（4本目の導線）。日本語を見た瞬間に英語を口から出す訓練で、①で受け取った表現・②で作った表現を「型」として登録し、反射で言えるまで回す。①→②の受け渡しをフレーズ単位で下支えする位置づけ。「成果は担保しない・自動採点はしない」の原則はそのままで、答えは自己採点、画面表示＋音声読み上げはあくまで参照用。
+
 ### 担保すること / しないこと
 
 | | |
@@ -32,9 +34,12 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 ```
 /login ──(Magic Link)──> /auth/callback ──> /
                                              │
-   ┌─────────────┬──────────┴──────┬─────────────┐
-   │             │                 │             │
-/materials   /monologue        /phrases     /settings
+   ┌────────────┬────────────┬───────┴────┬────────────┐
+   │            │            │            │            │
+/materials  /monologue  /compositions  /phrases    /settings
+   │                         │
+   │                    /compositions/[id] ──(スタート)──> プレイヤー
+   │                                        （日本語→考える→答え表示＋読み上げ→次…）
    │
 /materials/[id] ──(区間を切り出す)──> /clips/[id]
                                           │
@@ -50,12 +55,13 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 | 要素 | 内容 |
 |---|---|
 | Why バナー | `profiles.why_text`（英語の先に理解したい何か）を常時表示。未設定なら設定への誘導 |
-| 今日やること | リプロダクション（作りかけのクリップ、無ければ新規切り出しへ）／独り言。当日完了なら「今日済み」バッジ |
-| 続いている記録 | 連続日数、今週の独り言の合計時間、今週のリプロダクション回数 |
+| 今日やること | リプロダクション（作りかけのクリップ、無ければ新規切り出しへ）／独り言／瞬間英作文（コースを選んで流す）。当日完了なら「今日済み」バッジ |
+| 続いている記録 | 連続日数、今週の独り言の合計時間、今週のリプロダクション回数、今週の瞬間英作文回数 |
 | ヒートマップ | 直近12週 × 7日。当日はリング表示、未来日は薄く |
 | フレーズの残 | まだ使っていないフレーズ件数と、独り言への誘導 |
 
 連続日数は「今日まだ何もしていなければ昨日から数える」。日付が変わるまでは途切れ扱いにしない。
+瞬間英作文だけをやった日も「動かした日」に含める（`composition_reps > 0`）。
 日付境界は **Asia/Tokyo 固定**（`daily_activity` ビューと `src/lib/activity.ts` の両方）。
 
 ### `/materials` 素材ライブラリ
@@ -137,6 +143,35 @@ URL は `watch?v=` / `youtu.be/` / `shorts/` / `embed/` / 生のID / プロト�
 
 リプロダクションで入れた表現。**在庫（未卒業）** と **身についた（卒業済み）** の2区分で表示。出典クリップへのリンク、削除。
 
+### `/compositions` 瞬間英作文
+
+日本語を見た瞬間に英語を作る反射のドリル。**コース**（例文の束）を作り、選んで流すと日本語→答え→次…と自動で進む。トップの「今日やること」とヘッダー（デスクトップは上部ナビ、モバイルは下部ナビ）から入れる。
+
+**コースと例文の管理**（`/compositions` 一覧 → `/compositions/[id]` 詳細）
+
+- コースの CRUD（タイトル＋任意の説明）。コース内に例文を任意の数ぶら下げられる
+- 例文の CRUD。例文は `ja`（日本語）＋`en`（英語）の対。1件ずつの追加・編集・削除ができる。各行に**読み上げ（再生）ボタン**があり、その文の英語をその場で読み上げる（同じ行でもう一度押すと停止、別の行を押すと切替）
+- **CSV で一括登録**：1行 = `日本語,英語`。文にカンマ・引用符が入る前提で RFC4180 のクオート（`"..."`）を解し、**タブ区切り**（スプレッドシートからの貼り付け）も受ける。ヘッダー行は任意。既存コースへ追記する
+
+**流す（プレイヤー）** — スタート前に2つだけ選ぶ
+
+| 設定 | 選択肢 | 既定 |
+|---|---|---|
+| 順番 | 登録順 / ランダム | 登録順 |
+| 切り替え速度 | 3〜15秒（任意の整数秒） | 10秒 |
+
+- 開始すると日本語が1文だけ大きく出る → 設定秒だけ「考える時間」（**残り時間ゲージ**が左詰めで減っていく／CSSアニメ） → **答え（英語）を表示し、同時に読み上げる** → 次の文へ。これをコースの文章数だけ繰り返して1周で終わる
+- 読み上げは端末の音声合成（Web Speech Synthesis, `en-US`）。次への送りは読み上げ終了（`onend`）を待つので、長い文ほど答えが長く残る（TTS 非対応環境では固定秒で送る）。**無駄な `cancel()` は Chrome の音声エンジンを固まらせる主因**なので、割り込み（次へ／保険タイマー）で発話中のときだけ止める
+- 「歩きながら・見ずに口だけ」を許すため Wake Lock を張る（独り言と同じ）。iOS はユーザー操作を起点にしないと発話がブロックされるので、スタート押下時に無音の発話で一度解錠しておく。ドリル前に音が出るか確かめられる **「声のテスト」ボタン**もスタート画面に置く
+- **中断と再開**：× で止めると、その run の**再生順（例文 id の並び）＋位置**をコース単位で localStorage に保存し、待受に「続きから／最初から」を出す。ランダム順でも続きが成立するよう並びごと保存する。例文が消えて並びがズレた保存は自動で破棄し、1周し切ったらクリアする
+- 最後の設定（順番・秒数）も localStorage に覚える。設定・中断位置とも DB には持たない
+
+**継続への反映**
+
+- 1文を表示・読み上げるたびに **1回** と数え、その都度 `composition_logs` に `rep_count: 1` で記録する（バッチにせず即記録）。途中で止めても、そこまで再生した数はすべて残る。`/` は force-dynamic で毎回引き直すため `logCompositionReps` は `revalidatePath` しない
+- 日毎の回数を `daily_activity.composition_reps` に集計し、ダッシュボードの「続いている記録」に**今週の瞬間英作文回数**を出す
+- **瞬間英作文だけをやった日も連続日数に数える**（`hasActivity` が `composition_reps > 0` を含む）。ヒートマップの濃さにも加算する
+
 ### `/settings`
 
 - **英語の先に理解したい何か**（`why_text`）— 継続の芯としてホームに常時出す
@@ -159,7 +194,10 @@ Supabase / PostgreSQL。**全テーブル RLS 有効、`user_id = auth.uid()` �
 | `monologue_sessions` | `id`, `user_id`, `topic_id`, `mode`, `duration_sec`, `ja_memo`, `ai_suggestions`(jsonb), `used_phrase_ids`, `started_at` | 独り言1回分 |
 | `recordings` | `id`, `user_id`, `kind`, `clip_id`, `monologue_session_id`, `storage_path`, `mime_type`, `duration_sec`, `created_at` | 音声本体は Storage、ここはメタデータ。**独り言は保存せず、リプロダクションの聴き比べ録音のみ** |
 | `phrases` | `id`, `user_id`, `clip_id`, `text`, `meaning_ja`, `used_count`, `last_used_at`, `graduated_at`, `created_at` | **①と②を繋ぐ中核テーブル**。`graduated_at` が NULL の在庫だけが「今日使うフレーズ」に出る（初回使用で卒業） |
-| `daily_activity`（ビュー） | `user_id`, `activity_date`, `reproduction_reps`, `monologue_sec`, `recording_sec` | 継続トラッキング用。`security_invoker = on` で RLS を継承 |
+| `composition_courses` | `id`, `user_id`, `title`, `description`, `created_at`, `updated_at` | 瞬間英作文のコース（例文の束） |
+| `compositions` | `id`, `user_id`, `course_id`, `ja`, `en`, `sort_order`, `created_at`, `updated_at` | 例文1件（日本語＋英語）。`course_id` 内の `sort_order` 昇順が登録順。`course_id` は `on delete cascade` |
+| `composition_logs` | `id`, `user_id`, `course_id`, `rep_count`, `practiced_at` | 読み上げ回数の記録（`practice_logs` と同型）。`course_id` は **`on delete set null`**（コースを消しても連続日数の履歴は巻き戻さない） |
+| `daily_activity`（ビュー） | `user_id`, `activity_date`, `reproduction_reps`, `monologue_sec`, `recording_sec`, `composition_reps` | 継続トラッキング用。`security_invoker = on` で RLS を継承 |
 
 `monologue_topics` だけ SELECT ポリシーが `user_id is null or auth.uid() = user_id`（共通シードを全員が読む）。
 
@@ -212,6 +250,8 @@ type Annotation = {
 元動画自身が「録音は聞き返すためではなく可視化のため」と言っているので、日本語メモ → AI 変換のほうが忠実で確実だと判断した。
 将来 Whisper を足す余地は `recordings` テーブルに残してある。
 
+なお、瞬間英作文の**音声読み上げは別物**。あれは音声「合成」（`speechSynthesis` = TTS）で、Claude API も認識も使わない。避けたのは認識（STT）であって、合成（TTS）はブラウザ標準で広く使えるので採用している（ブラウザ差の注意は §6）。
+
 ---
 
 ## 5. Server Actions
@@ -224,6 +264,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | `clips.ts` | `createClip`, `updateClip`, `deleteClip`, `logPractice` |
 | `phrases.ts` | `addPhrases`, `markPhraseUsed`, `deletePhrase` |
 | `monologue.ts` | `saveMonologueSession`, `saveMonologueFeedback`, `addCustomTopic` |
+| `compositions.ts` | `createCourse`, `updateCourse`, `deleteCourse`, `addComposition`, `updateComposition`, `deleteComposition`, `importCompositions`, `logCompositionReps` |
 | `recordings.ts` | `saveRecording` |
 | `profile.ts` | `updateProfile`, `signOut` |
 
@@ -246,6 +287,9 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | サーバー側の文字起こし自動取得は不安定（IPブロック・CORS） | 取得はユーザーのブラウザで動くブックマークレット。手動コピペもフォールバックに残す |
 | `font-mono`（Geist Mono）に日本語グリフがない | 「3回」「1日」「30秒」の単位は `font-mono` の外に出す。中に入れると豆腐になる |
 | 選択範囲はボタンの mousedown で解除される | 注釈ツールバーは `onMouseDown` で `preventDefault()` する |
+| 音声読み上げ（TTS）はブラウザ差が大きい | `speechSynthesis`。声は非同期ロード（`onvoiceschanged` を待つ）。iOS Safari は発話にユーザー操作の連鎖が要る（スタート時に無音発話で解錠）。非対応環境は固定秒送りにフォールバック |
+| `speechSynthesis` は `cancel()` の多用でエンジンが固まる | 固まると**ブラウザ再起動まで無音**になる（voice はあるのに `start` が来ない）。cancel は割り込み時のみに絞り、`cancel()`→即 `speak()` はしない。復帰用に「声のテスト」ボタンを用意 |
+| CSV の文にカンマ・引用符が混じる | 例文がカンマを含む前提で RFC4180 パースし、タブ区切りも受ける。自前パーサをユニットテスト対象にする |
 
 ---
 
@@ -267,7 +311,10 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | A-Bループの終端検知 → 回数カウント → `practice_logs` 記録 | 通過 |
 | フレーズをタップ → `used_count` 加算 | 通過（①→②の受け渡し） |
 | プロフィール保存とダッシュボードへの反映 | 通過 |
-| ビルド / Lint / ユニットテスト20件 | 全通過 |
+| **瞬間英作文のマイグレーション0004**（3テーブル・全RLS・FK・`daily_activity` へ `composition_reps` 追加） | ローカルへ適用を確認。`compositions` は course 削除で cascade、`composition_logs.course_id` は set null |
+| **瞬間英作文のビュー集計**（`composition_logs` → `daily_activity.composition_reps`、JST 日付境界） | 実データ1件で 7 回が集計されること、コース削除後も log が `course_id=null` で残る（連続日数を巻き戻さない）ことを確認 |
+| **瞬間英作文のプレイヤー**（Playwright・ログイン状態） | 残り時間ゲージの表示、中断→「続きから」で保存位置から再開、1文=1回の都度記録（DB に `rep_count:1` が +N 行）、一覧の行の読み上げ発火を確認 |
+| ビルド / Lint / ユニットテスト49件 | 全通過（CSV/TSV パース・瞬間英作文の連続日数/ヒートマップを追加） |
 
 ### 未検証
 
@@ -275,14 +322,17 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 |---|---|
 | **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
 | **録音の実機保存**（Storage アップロード＋メタデータ行） | ヘッドレスブラウザにマイクがないため |
+| **瞬間英作文の本番反映** | マイグレーション0004はローカルのみ適用。本番（クラウド Supabase）へは未適用 |
+| **プレイヤーの TTS 実機の音出し**（`speechSynthesis` の発話・iOS 解錠・声の非同期ロード） | speak 呼び出しと `start` イベントまでは確認したが、**ヘッドレスは音声エンジンが固まり音自体が出ない**ため audio は未検証。端末（特に iOS Safari）＋ブラウザ再起動での確認が必要 |
 | 実機のモバイル（iOS / Android）での動作 | 未実施 |
 
 ### テスト
 
-`npm test` は `node:test` で `tests/*.test.ts` を実行する（20件）。
+`npm test` は `node:test` で `tests/*.test.ts` を実行する（49件）。
 外部依存のないロジックだけを対象にしている。
 
 - 文字起こしの整形（タイムスタンプ除去、文分割とオフセットの一致）
 - 注釈の正規化（範囲外・空範囲・未知種別・重複IDの排除）
-- 連続日数とヒートマップ（月・年またぎ、今日未着手の扱い）
+- 連続日数とヒートマップ（月・年またぎ、今日未着手の扱い、瞬間英作文だけの日）
 - YouTube URL の解釈（各種形式、不正入力）
+- CSV／TSV の一括登録パース（クオート・カンマ・タブ・ヘッダー有無・改行/CRLF/BOM）

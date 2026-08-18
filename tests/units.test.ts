@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { calcStreak, buildHeatmap, shiftDate } from '../src/lib/activity.ts';
+import { parseCompositionsCsv } from '../src/lib/composition-csv.ts';
 import { isLocalSupabase, localMailboxUrl } from '../src/lib/local-dev.ts';
 import {
   cleanTranscript,
@@ -247,6 +248,16 @@ describe('activity: 連続日数とヒートマップ', () => {
     reproduction_reps: reps,
     monologue_sec: 0,
     recording_sec: 0,
+    composition_reps: 0,
+  });
+
+  const compositionRow = (activity_date: string, compositionReps = 1): DailyActivity => ({
+    user_id: 'u',
+    activity_date,
+    reproduction_reps: 0,
+    monologue_sec: 0,
+    recording_sec: 0,
+    composition_reps: compositionReps,
   });
 
   it('日付の加減算が月・年をまたぐ', () => {
@@ -279,5 +290,80 @@ describe('activity: 連続日数とヒートマップ', () => {
     const today = heatmap.at(-1)?.find((cell) => cell.date === '2026-08-01');
     assert.ok(today);
     assert.equal(today.level, 4);
+  });
+
+  it('瞬間英作文だけの日も連続日数に数える', () => {
+    assert.equal(
+      calcStreak(
+        [compositionRow('2026-08-01'), compositionRow('2026-07-31'), row('2026-07-30')],
+        '2026-08-01',
+      ),
+      3,
+    );
+  });
+
+  it('瞬間英作文の回数もヒートマップの濃さに効く', () => {
+    const heatmap = buildHeatmap([compositionRow('2026-08-01', 30)], 12, '2026-08-01');
+    const today = heatmap.at(-1)?.find((cell) => cell.date === '2026-08-01');
+    assert.ok(today);
+    assert.equal(today.level, 4);
+    assert.equal(today.compositionReps, 30);
+  });
+});
+
+describe('composition-csv: 瞬間英作文の一括登録パース', () => {
+  it('素直なカンマ区切り', () => {
+    const { rows, skipped } = parseCompositionsCsv('私はペンです,I am a pen.\n君は鳥だ,You are a bird.');
+    assert.deepEqual(rows, [
+      { ja: '私はペンです', en: 'I am a pen.' },
+      { ja: '君は鳥だ', en: 'You are a bird.' },
+    ]);
+    assert.equal(skipped, 0);
+  });
+
+  it('英文にカンマが入る場合はクオートで守る（RFC4180）', () => {
+    const { rows } = parseCompositionsCsv('なるほど,"I see, that makes sense."');
+    assert.deepEqual(rows, [{ ja: 'なるほど', en: 'I see, that makes sense.' }]);
+  });
+
+  it('"" は 1 個の引用符にほどく', () => {
+    const { rows } = parseCompositionsCsv('引用,"He said ""hi"" to me."');
+    assert.deepEqual(rows, [{ ja: '引用', en: 'He said "hi" to me.' }]);
+  });
+
+  it('タブ区切り（スプレッドシートからの貼り付け）も受ける', () => {
+    const { rows } = parseCompositionsCsv('私はペンです\tI am a pen.\n君は鳥だ\tYou are a bird.');
+    assert.deepEqual(rows, [
+      { ja: '私はペンです', en: 'I am a pen.' },
+      { ja: '君は鳥だ', en: 'You are a bird.' },
+    ]);
+  });
+
+  it('見出し行は落とす', () => {
+    const { rows } = parseCompositionsCsv('日本語,英語\n私はペンです,I am a pen.');
+    assert.deepEqual(rows, [{ ja: '私はペンです', en: 'I am a pen.' }]);
+  });
+
+  it('空行は無視し、片側が欠けた行は skipped に数える', () => {
+    const { rows, skipped } = parseCompositionsCsv(
+      '私はペンです,I am a pen.\n\n欠けてる行\n君は鳥だ,You are a bird.\n',
+    );
+    assert.deepEqual(rows, [
+      { ja: '私はペンです', en: 'I am a pen.' },
+      { ja: '君は鳥だ', en: 'You are a bird.' },
+    ]);
+    assert.equal(skipped, 1);
+  });
+
+  it('クオート内の改行・CRLF・BOM を通す', () => {
+    const { rows } = parseCompositionsCsv('﻿複数行,"line1\nline2"\r\n次,next\r\n');
+    assert.deepEqual(rows, [
+      { ja: '複数行', en: 'line1\nline2' },
+      { ja: '次', en: 'next' },
+    ]);
+  });
+
+  it('空文字は空配列', () => {
+    assert.deepEqual(parseCompositionsCsv('   '), { rows: [], skipped: 0 });
   });
 });

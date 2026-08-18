@@ -99,12 +99,44 @@ export type Phrase = {
   graduated_at: string | null;
 } & Timestamps;
 
+/** 瞬間英作文のコース（例文の束） */
+export type CompositionCourse = {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** 例文1件（日本語→英語）。course_id 内の sort_order 昇順が登録順。 */
+export type Composition = {
+  id: string;
+  user_id: string;
+  course_id: string;
+  ja: string;
+  en: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** 読み上げ回数の記録（practice_logs と同型）。course は消えても履歴は残る。 */
+export type CompositionLog = {
+  id: string;
+  user_id: string;
+  course_id: string | null;
+  rep_count: number;
+  practiced_at: string;
+};
+
 export type DailyActivity = {
   user_id: string;
   activity_date: string;
   reproduction_reps: number;
   monologue_sec: number;
   recording_sec: number;
+  composition_reps: number;
 };
 
 /** Insert 時に省略できる列 */
@@ -154,6 +186,12 @@ export type Database = {
         Phrase,
         'id' | 'clip_id' | 'meaning_ja' | 'used_count' | 'last_used_at' | 'graduated_at' | 'created_at'
       >;
+      composition_courses: Table<
+        CompositionCourse,
+        'id' | 'description' | 'created_at' | 'updated_at'
+      >;
+      compositions: Table<Composition, 'id' | 'sort_order' | 'created_at' | 'updated_at'>;
+      composition_logs: Table<CompositionLog, 'id' | 'course_id' | 'rep_count' | 'practiced_at'>;
     };
     Views: {
       daily_activity: {
