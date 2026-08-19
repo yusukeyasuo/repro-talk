@@ -10,12 +10,12 @@ on conflict (id) do nothing;
 
 -- 認証ユーザーが生成結果を書き込める。読み取りは public URL 経由なので select policy は不要。
 -- 同じ文は同じ hash 名になるため、実質的に共有キャッシュとして働く。
-create policy "tts_storage_insert_authenticated" on storage.objects
-  for insert to authenticated
-  with check (bucket_id = 'tts');
+-- 注意: storage の RLS は `to authenticated`（DBロール指定）だと効かないことがある。
+-- 既存の recordings ポリシーと同じく、ロール無指定＋`auth.uid()` で判定する。
+create policy "tts_storage_insert" on storage.objects
+  for insert with check (bucket_id = 'tts' and auth.uid() is not null);
 
--- 既存キャッシュを上書き（再生成）できるように update も認証ユーザーに許可。
-create policy "tts_storage_update_authenticated" on storage.objects
-  for update to authenticated
-  using (bucket_id = 'tts')
-  with check (bucket_id = 'tts');
+-- 既存キャッシュを上書き（再生成）できるように update も許可。
+create policy "tts_storage_update" on storage.objects
+  for update using (bucket_id = 'tts' and auth.uid() is not null)
+  with check (bucket_id = 'tts' and auth.uid() is not null);

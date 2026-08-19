@@ -207,7 +207,7 @@ Supabase / PostgreSQL。**全テーブル RLS 有効、`user_id = auth.uid()` �
 `storage.foldername(name)[1] = auth.uid()` のポリシーで他人のフォルダに触れない。
 リプロダクションの録音（聴き比べ用）だけをクライアントから直接アップロードし、Server Action はメタデータ行だけ作る（Blob をサーバに通さない）。**独り言の録音は保存しない**（時間だけ `monologue_sessions.duration_sec` に残す）。
 
-`tts` バケット（**公開**）— 瞬間英作文の読み上げ音声（MP3）のキャッシュ。パスは content-hash（`sha256(model|voice|text).mp3`）で、機微でない英語音声なので公開読み（`<audio src>` に public URL を使う）。書き込みは認証ユーザーのみ。`POST /api/tts` が生成＆保存する（`migration 0005`）。
+`tts` バケット（**公開**）— 瞬間英作文の読み上げ音声（MP3）のキャッシュ。パスは content-hash（`sha256(model|voice|text).mp3`）で、機微でない英語音声なので公開読み（`<audio src>` に public URL を使う）。`POST /api/tts` が生成し、**サーバ専用の service role キーで保存する**（`SUPABASE_SERVICE_ROLE_KEY`）。SSR サーバクライアントの storage はユーザー JWT を確実に載せられず（`/api` は proxy のセッション更新対象外）、insert の RLS を通せないため。RLS は `recordings` と同じく `auth.uid()` 判定（storage では `to authenticated` が効かない）。`migration 0005`。
 
 ### Annotation 型
 
@@ -293,6 +293,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | 選択範囲はボタンの mousedown で解除される | 注釈ツールバーは `onMouseDown` で `preventDefault()` する |
 | 音声読み上げ（TTS）はブラウザ差が大きい | `speechSynthesis`。声は非同期ロード（`onvoiceschanged` を待つ）。iOS Safari は発話にユーザー操作の連鎖が要る（スタート時に無音発話で解錠）。非対応環境は固定秒送りにフォールバック |
 | `speechSynthesis` は使ううちにエンジンが固まる（無音化） | 固まると voice はあるのに `start` が来ず、**リロードでは戻らずブラウザ再起動が要る**（音声サービス側の固着）。→ 読み上げの主経路を**クラウドTTS＋`<audio>`再生**に変更し、`speechSynthesis` は未設定/失敗時のフォールバックへ降格（固着ゼロ）。フォールバック用に発話中は `resume()` の keepalive（8秒毎）だけ残す |
+| Route Handler から Storage に書けない（RLS 403） | ①`storage.upload()` に `ArrayBuffer` を渡すと壊れる→Storage REST に生バイトで送る ②storage の RLS は `to authenticated` が効かない→`auth.uid()` で判定 ③SSR サーバクライアントはユーザー JWT を storage に載せられず（`/api` は proxy 対象外で失効も絡む）認証済みでも 403→**サーバ専用の service role キーで保存**（認証は `getUser` で担保） |
 | CSV の文にカンマ・引用符が混じる | 例文がカンマを含む前提で RFC4180 パースし、タブ区切りも受ける。自前パーサをユニットテスト対象にする |
 
 ---
@@ -327,7 +328,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
 | **録音の実機保存**（Storage アップロード＋メタデータ行） | ヘッドレスブラウザにマイクがないため |
 | **瞬間英作文の本番反映** | マイグレーション0004/0005はローカルのみ適用。本番（クラウド Supabase）へは未適用 |
-| **クラウドTTSの音出し**（`POST /api/tts` の OpenAI 生成・`tts` バケットのキャッシュ・`<audio>` 再生） | `OPENAI_API_KEY` 未設定のため生成は未実行。マイグレーション適用・ルート/型・キャッシュキー・ビルドは確認済み。キー設定後に実機で音が鳴るか＋iOS Safari の `<audio>` 解錠を要確認 |
+| **クラウドTTS**（`POST /api/tts` の OpenAI 生成→`tts` バケット保存→URL 返却） | ローカルで通過。認証コンテキストから `/api/tts` が 200（生成 約2.6秒）、同文の2回目は `cached:true` で 68ms、返る public URL の音声も HEAD 200。iOS Safari の `<audio>` 実機解錠は未確認 |
 | 実機のモバイル（iOS / Android）での動作 | 未実施 |
 
 ### テスト
