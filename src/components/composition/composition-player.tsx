@@ -11,6 +11,10 @@ import type { Composition } from '@/types/database';
 
 export type PlayProgress = { index: number; finished: boolean };
 
+// 読み上げが終わったあと、声に出して再現するための間。ここが尽きると次の文へ送る。
+// タップすれば待たずに次へ行けるので、迷ったら少し長めでよい。
+const REPRODUCE_PAUSE_MS = 3000;
+
 type Props = {
   courseId: string;
   courseTitle: string;
@@ -40,6 +44,8 @@ export function CompositionPlayer({
     Math.min(Math.max(0, startIndex), Math.max(0, total - 1)),
   );
   const [revealed, setRevealed] = useState(false);
+  // 読み上げ後の「声に出して再現する間」に入っているか（ゲージ・ラベルの出し分け用）。
+  const [reproducing, setReproducing] = useState(false);
   const [finished, setFinished] = useState(false);
   const [doneThisRound, setDoneThisRound] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -80,6 +86,7 @@ export function CompositionPlayer({
     clearTimer();
     stopSpeaking();
     revealedRef.current = false;
+    setReproducing(false);
     if (index + 1 >= total) {
       setFinished(true);
       void releaseWakeLock();
@@ -89,19 +96,22 @@ export function CompositionPlayer({
     }
   }, [index, total, clearTimer, stopSpeaking, releaseWakeLock]);
 
-  // 答えフェーズ：現在の英語を読み上げ、onend／保険タイマーで次へ送る。
+  // 答えフェーズ：現在の英語を読み上げ、読み終えたら「再現の間」を挟んでから次へ送る。
   const runAnswer = useCallback(() => {
     const en = sequence[index]?.en ?? '';
-    let advanced = false;
-    const advance = () => {
-      if (advanced || pausedRef.current) return; // 一時停止中の割り込みでは送らない
-      advanced = true;
-      goNext();
+    setReproducing(false); // 読み上げ中はまだ再現フェーズではない（resume での読み直しでも戻す）
+    let toReproduce = false;
+    // 読み上げ完了（onend／保険タイマー）→ 声に出して再現する間をとってから次へ。
+    const startReproduce = () => {
+      if (toReproduce || pausedRef.current) return; // 一時停止中の割り込みでは進めない
+      toReproduce = true;
+      setReproducing(true);
+      arm(REPRODUCE_PAUSE_MS, goNext);
     };
-    speaker.speak(en, { onend: advance });
+    speaker.speak(en, { onend: startReproduce });
     // onend が来ない/遅い環境向けの保険。クラウド音声の読み込み待ちも見込んで長めに。
     const safetyMs = Math.min(20000, Math.max(6000, en.length * 110));
-    arm(safetyMs, advance);
+    arm(safetyMs, startReproduce);
   }, [sequence, index, arm, goNext]);
 
   // 考える時間が尽きた／タップされたときに1回だけ答えを出す。連打での二重 log を revealedRef で防ぐ。
@@ -191,6 +201,7 @@ export function CompositionPlayer({
     pausedRef.current = false;
     revealedRef.current = false;
     setPaused(false);
+    setReproducing(false);
     setDoneThisRound(0);
     setFinished(false);
     setRevealed(false);
@@ -280,7 +291,26 @@ export function CompositionPlayer({
           {/* 考える時間ゲージ / 答え */}
           <div className="flex min-h-[4rem] w-full max-w-md flex-col items-center gap-2">
             {revealed ? (
-              <p className="font-mono text-xl text-foreground sm:text-2xl">{current?.en}</p>
+              <>
+                <p className="font-mono text-xl text-foreground sm:text-2xl">{current?.en}</p>
+                {/* 再現の間だけ細いゲージで残りを見せる（読み上げ中は出さない）。
+                    key で文が変わるたびに頭から流し直す。一時停止は凍結。 */}
+                {reproducing && (
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      key={`rep-${index}`}
+                      className="h-full origin-left rounded-full bg-foreground/50"
+                      style={{
+                        animation: `composition-drain ${REPRODUCE_PAUSE_MS}ms linear forwards`,
+                        animationPlayState: paused ? 'paused' : 'running',
+                      }}
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {reproducing ? '声に出して再現' : '読み上げ中…'}
+                </p>
+              </>
             ) : (
               <>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
