@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useTts } from '@/hooks/use-tts';
+import * as speaker from '@/lib/speaker';
 import { parseCompositionsCsv } from '@/lib/composition-csv';
 import { cn } from '@/lib/utils';
 import type { Composition } from '@/types/database';
@@ -35,43 +35,26 @@ export function CompositionManager({
   courseId: string;
   compositions: Composition[];
 }) {
-  const tts = useTts('en-US');
   const [playingId, setPlayingId] = useState<string | null>(null);
 
   // 一覧を離れる（＝プレイヤーへ切替 / 別ページ）ときは読み上げを止める
   useEffect(() => {
-    return () => {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-    };
+    return () => speaker.cancel();
   }, []);
 
   function play(composition: Composition) {
     // 同じ行をもう一度押したら停止
     if (playingId === composition.id) {
-      tts.cancel();
+      speaker.cancel();
       setPlayingId(null);
       return;
     }
-    const speakIt = () => {
-      setPlayingId(composition.id);
-      tts.speak(composition.en, {
-        onend: () => setPlayingId((cur) => (cur === composition.id ? null : cur)),
-      });
-    };
-    const speaking =
-      typeof window !== 'undefined' &&
-      'speechSynthesis' in window &&
-      window.speechSynthesis.speaking;
-    if (speaking) {
-      // 再生中を止めてから。cancel() 直後の speak() は Chrome が握り潰すので一拍おく
-      tts.cancel();
-      window.setTimeout(speakIt, 60);
-    } else {
-      // 何も鳴っていなければ、ユーザー操作の中で即発話（iOS 対策）
-      speakIt();
-    }
+    speaker.unlock(); // 解錠は必ずユーザー操作の中で（iOS 対策）
+    setPlayingId(composition.id);
+    // <audio> は src を差し替えれば前の再生を止めて切り替わる（cancel の握り潰し問題なし）。
+    speaker.speak(composition.en, {
+      onend: () => setPlayingId((cur) => (cur === composition.id ? null : cur)),
+    });
   }
 
   return (
@@ -95,7 +78,7 @@ export function CompositionManager({
             <CompositionRow
               key={c.id}
               composition={c}
-              canPlay={tts.supported}
+              canPlay
               playing={playingId === c.id}
               onPlay={() => play(c)}
             />

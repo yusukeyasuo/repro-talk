@@ -22,7 +22,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { primeSpeech } from '@/hooks/use-tts';
+import * as speaker from '@/lib/speaker';
 import { cn } from '@/lib/utils';
 import type { Composition, CompositionCourse } from '@/types/database';
 
@@ -122,19 +122,14 @@ export function CourseScreen({
     }
   }
 
-  // 端末で英語の読み上げが鳴るかを、ユーザー操作の中で単発発話して確かめる。
+  // 端末で英語の読み上げが鳴るかを、ユーザー操作の中で確かめる（クラウド→失敗時は端末合成）。
   function testVoice() {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      toast.error('このブラウザは音声読み上げに対応していません');
-      return;
-    }
-    const u = new SpeechSynthesisUtterance('Voice test. This is the reading voice.');
-    u.lang = 'en-US';
-    window.speechSynthesis.speak(u);
+    speaker.unlock();
+    speaker.speak('Voice test. This is the reading voice.');
   }
 
   function startFresh() {
-    primeSpeech(); // 解錠は必ずユーザー操作の中で（iOS 対策）
+    speaker.unlock(); // 解錠は必ずユーザー操作の中で（iOS 対策）
     const seq = order === 'random' ? shuffle(compositions) : compositions;
     setRun({ sequence: seq, startIndex: 0 });
     setMode('play');
@@ -145,7 +140,7 @@ export function CourseScreen({
       startFresh();
       return;
     }
-    primeSpeech();
+    speaker.unlock();
     const byId = new Map(compositions.map((c) => [c.id, c]));
     const seq = resume.ids.map((id) => byId.get(id)).filter((c): c is Composition => !!c);
     const startIndex = Math.min(resume.index, Math.max(0, seq.length - 1));
