@@ -1,12 +1,12 @@
 'use client';
 
-import { Check, ChevronRight, RotateCcw, X } from 'lucide-react';
+import { Check, ChevronRight, Eye, Pause, Play, RotateCcw, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { logCompositionReps } from '@/app/actions/compositions';
 import { Button } from '@/components/ui/button';
-import { useTts } from '@/hooks/use-tts';
 import { useWakeLock } from '@/hooks/use-wake-lock';
+import * as speaker from '@/lib/speaker';
 import type { Composition } from '@/types/database';
 
 export type PlayProgress = { index: number; finished: boolean };
@@ -23,9 +23,6 @@ type Props = {
   onExit: (progress: PlayProgress) => void;
 };
 
-// TTS 非対応環境で答えを見せておく固定時間
-const ANSWER_HOLD_MS = 3500;
-
 export function CompositionPlayer({
   courseId,
   courseTitle,
@@ -34,8 +31,7 @@ export function CompositionPlayer({
   intervalSec,
   onExit,
 }: Props) {
-  const tts = useTts('en-US');
-  const wakeLock = useWakeLock();
+  const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock();
 
   const total = sequence.length;
   const thinkMs = Math.max(3, intervalSec) * 1000;
@@ -46,8 +42,15 @@ export function CompositionPlayer({
   const [revealed, setRevealed] = useState(false);
   const [finished, setFinished] = useState(false);
   const [doneThisRound, setDoneThisRound] = useState(0);
+  const [paused, setPaused] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // revealed / paused は setState が非同期なので、タイマー・onend の割り込み判定は ref（同期）で見る。
+  const revealedRef = useRef(false);
+  const pausedRef = useRef(false);
+  // 現タイマーの締切（performance.now 基準）と、一時停止時に保存する残り時間。
+  const deadlineRef = useRef(0);
+  const remainingRef = useRef(0);
 
   const current = sequence[index];
 
@@ -58,10 +61,67 @@ export function CompositionPlayer({
     }
   }, []);
 
+  // 再生を止める（<audio> と、フォールバックの speechSynthesis の両方）。
+  const stopSpeaking = useCallback(() => {
+    speaker.cancel();
+  }, []);
+
+  // タイマーを張る。締切を控えておき、一時停止で残り時間を割り出せるようにする。
+  const arm = useCallback(
+    (ms: number, cb: () => void) => {
+      clearTimer();
+      deadlineRef.current = performance.now() + ms;
+      timerRef.current = setTimeout(cb, ms);
+    },
+    [clearTimer],
+  );
+
+  const goNext = useCallback(() => {
+    clearTimer();
+    stopSpeaking();
+    revealedRef.current = false;
+    if (index + 1 >= total) {
+      setFinished(true);
+      void releaseWakeLock();
+    } else {
+      setRevealed(false);
+      setIndex(index + 1);
+    }
+  }, [index, total, clearTimer, stopSpeaking, releaseWakeLock]);
+
+  // 答えフェーズ：現在の英語を読み上げ、onend／保険タイマーで次へ送る。
+  const runAnswer = useCallback(() => {
+    const en = sequence[index]?.en ?? '';
+    let advanced = false;
+    const advance = () => {
+      if (advanced || pausedRef.current) return; // 一時停止中の割り込みでは送らない
+      advanced = true;
+      goNext();
+    };
+    speaker.speak(en, { onend: advance });
+    // onend が来ない/遅い環境向けの保険。クラウド音声の読み込み待ちも見込んで長めに。
+    const safetyMs = Math.min(20000, Math.max(6000, en.length * 110));
+    arm(safetyMs, advance);
+  }, [sequence, index, arm, goNext]);
+
+  // 考える時間が尽きた／タップされたときに1回だけ答えを出す。連打での二重 log を revealedRef で防ぐ。
+  const reveal = useCallback(() => {
+    if (revealedRef.current) return;
+    revealedRef.current = true;
+    setRevealed(true);
+    setDoneThisRound((n) => n + 1);
+    // 1文表示 = 1回完了。都度サーバへ記録するので、途中で止めても数が残る。
+    void logCompositionReps({ courseId, repCount: 1 });
+    runAnswer();
+  }, [courseId, runAnswer]);
+
+  // 考えるフェーズ：残り時間ぶんだけ待って reveal する。
+  const runThink = useCallback((ms: number) => arm(ms, reveal), [arm, reveal]);
+
   // 起動時：解錠（gesture 直後にもう一度）＋ Wake Lock
   useEffect(() => {
-    tts.unlock();
-    void wakeLock.request();
+    speaker.unlock();
+    void requestWakeLock();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -69,77 +129,80 @@ export function CompositionPlayer({
   useEffect(() => {
     return () => {
       clearTimer();
-      tts.cancel();
-      void wakeLock.release();
+      speaker.cancel();
+      void releaseWakeLock();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const goNext = useCallback(() => {
-    clearTimer();
-    // 自然終了（onend）で来たときは speaking=false なので cancel しない。
-    // 割り込み（次へ／保険タイマー）で発話中のときだけ止める。無駄な cancel はスタックの元。
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      const s = window.speechSynthesis;
-      if (s.speaking || s.pending) s.cancel();
-    }
-    if (index + 1 >= total) {
-      setFinished(true);
-      void wakeLock.release();
-    } else {
-      setRevealed(false);
-      setIndex(index + 1);
-    }
-  }, [index, total, clearTimer, wakeLock]);
-
-  // 1文サイクル：考える時間 → 答え表示＋読み上げ＋カウント → 次へ
+  // 考える時間のあいだに、今の文と次の文の音声URLを先に取っておく（体感遅延を消す）。
   useEffect(() => {
     if (finished || total === 0) return;
-    // revealed は各遷移（goNext / restart / 初期値）で false 済み。ここでは触らない。
-    clearTimer();
+    speaker.prefetch(sequence[index]?.en ?? '');
+    speaker.prefetch(sequence[index + 1]?.en ?? '');
+  }, [index, finished, total, sequence]);
 
-    const reveal = () => {
-      setRevealed(true);
-      setDoneThisRound((n) => n + 1);
-      // 1文再生 = 1回完了。都度サーバへ記録するので、途中で止めても数が残る。
-      void logCompositionReps({ courseId, repCount: 1 });
-
-      const en = sequence[index]?.en ?? '';
-      if (tts.supported) {
-        let advanced = false;
-        const advance = () => {
-          if (advanced) return;
-          advanced = true;
-          goNext();
-        };
-        tts.speak(en, { onend: advance });
-        const safetyMs = Math.min(20000, Math.max(4000, en.length * 110));
-        timerRef.current = setTimeout(advance, safetyMs);
-      } else {
-        timerRef.current = setTimeout(goNext, ANSWER_HOLD_MS);
-      }
-    };
-
-    timerRef.current = setTimeout(reveal, thinkMs);
+  // 1文サイクルの起点：新しい文（index 変化）ごとに考えるフェーズを張る。
+  // 答えフェーズに入った後（revealedRef=true）は再アームしない＝この effect は文の開始だけを担う。
+  useEffect(() => {
+    if (finished || total === 0) return;
+    if (revealedRef.current) return;
+    runThink(thinkMs);
     return clearTimer;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, finished, tts.supported]);
+  }, [runThink, thinkMs, finished, total, clearTimer]);
+
+  function onTap() {
+    if (paused) {
+      resume();
+      return;
+    }
+    if (!revealedRef.current) reveal(); // 考える時間中：今すぐ答えを表示＋読み上げ→自動で次へ
+    else goNext(); // 答え表示中：もう次へ
+  }
+
+  function pause() {
+    pausedRef.current = true;
+    setPaused(true);
+    remainingRef.current = Math.max(0, deadlineRef.current - performance.now());
+    clearTimer();
+    stopSpeaking();
+    void releaseWakeLock();
+  }
+
+  function resume() {
+    pausedRef.current = false;
+    setPaused(false);
+    void requestWakeLock();
+    if (revealedRef.current) {
+      runAnswer(); // 答えは頭から読み直す（speechSynthesis の pause/resume は端末差が大きく不安定）
+    } else {
+      runThink(remainingRef.current > 0 ? remainingRef.current : thinkMs); // 止めた位置から続き
+    }
+  }
+
+  function togglePause() {
+    if (paused) resume();
+    else pause();
+  }
 
   function restart() {
     clearTimer();
-    tts.cancel();
+    speaker.cancel();
+    pausedRef.current = false;
+    revealedRef.current = false;
+    setPaused(false);
     setDoneThisRound(0);
     setFinished(false);
     setRevealed(false);
     setIndex(0);
-    void wakeLock.request();
+    void requestWakeLock();
   }
 
   function exitNow() {
     clearTimer();
-    tts.cancel();
+    speaker.cancel();
     // 次に再開すべき位置：答えを見た文は完了とみなして次へ、まだなら現在位置。
-    const next = finished ? total : revealed ? index + 1 : index;
+    const next = finished ? total : revealedRef.current ? index + 1 : index;
     onExit({ index: next, finished });
   }
 
@@ -159,9 +222,21 @@ export function CompositionPlayer({
             </span>
           </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={exitNow} aria-label="止めて終了">
-          <X className="size-5" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {!finished && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={togglePause}
+              aria-label={paused ? '再開' : '一時停止'}
+            >
+              {paused ? <Play className="size-5" /> : <Pause className="size-5" />}
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" onClick={exitNow} aria-label="止めて終了">
+            <X className="size-5" />
+          </Button>
+        </div>
       </div>
 
       {/* 全体進捗 */}
@@ -195,9 +270,9 @@ export function CompositionPlayer({
       ) : (
         <button
           type="button"
-          onClick={goNext}
-          className="flex flex-1 cursor-pointer flex-col items-center justify-center gap-8 px-6 text-center"
-          aria-label="次へ"
+          onClick={onTap}
+          className="relative flex flex-1 cursor-pointer flex-col items-center justify-center gap-8 px-6 text-center"
+          aria-label={paused ? '再開' : revealed ? '次へ' : '答えを見る'}
         >
           {/* 日本語（font-mono に入れない＝豆腐対策） */}
           <p className="max-w-2xl text-2xl leading-relaxed sm:text-3xl">{current?.ja}</p>
@@ -209,29 +284,59 @@ export function CompositionPlayer({
             ) : (
               <>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                  {/* key で文が変わるたびにアニメーションを頭から流し直す */}
+                  {/* key で文が変わるたびにアニメーションを頭から流し直す。一時停止は
+                      再マウントせず animation-play-state を止める＝凍結位置から再開できる。 */}
                   <div
                     key={index}
                     className="h-full origin-left rounded-full bg-foreground"
-                    style={{ animation: `composition-drain ${thinkMs}ms linear forwards` }}
+                    style={{
+                      animation: `composition-drain ${thinkMs}ms linear forwards`,
+                      animationPlayState: paused ? 'paused' : 'running',
+                    }}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">考える時間</p>
               </>
             )}
           </div>
+
+          {/* 一時停止オーバーレイ。ボタンの入れ子を避けるため中は div のみ＝タップは親へ届き再開する。 */}
+          {paused && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/95">
+              <div className="grid size-14 place-items-center rounded-full bg-accent">
+                <Pause className="size-7" />
+              </div>
+              <div>
+                <p className="text-lg font-medium">一時停止中</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  画面をタップすると続きから再開します
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium">
+                <Play className="size-4" />
+                再開
+              </span>
+            </div>
+          )}
         </button>
       )}
 
       {/* フッター */}
       {!finished && (
         <div className="flex items-center justify-between gap-3 border-t px-4 py-3">
-          <p className="text-xs text-muted-foreground">
-            {tts.supported ? '答えは自動で読み上げます' : 'この端末は読み上げ非対応（表示のみ）'}
-          </p>
-          <Button variant="outline" size="sm" onClick={goNext}>
-            次へ
-            <ChevronRight className="size-4" />
+          <p className="text-xs text-muted-foreground">答えは自動で読み上げます</p>
+          <Button variant="outline" size="sm" onClick={onTap} disabled={paused}>
+            {revealed ? (
+              <>
+                次へ
+                <ChevronRight className="size-4" />
+              </>
+            ) : (
+              <>
+                <Eye className="size-4" />
+                答えを見る
+              </>
+            )}
           </Button>
         </div>
       )}

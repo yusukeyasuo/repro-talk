@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import { calcStreak, buildHeatmap, shiftDate } from '../src/lib/activity.ts';
 import { parseCompositionsCsv } from '../src/lib/composition-csv.ts';
+import { ttsCacheKey } from '../src/lib/tts-cache.ts';
 import { isLocalSupabase, localMailboxUrl } from '../src/lib/local-dev.ts';
 import {
   cleanTranscript,
@@ -365,5 +366,29 @@ describe('composition-csv: 瞬間英作文の一括登録パース', () => {
 
   it('空文字は空配列', () => {
     assert.deepEqual(parseCompositionsCsv('   '), { rows: [], skipped: 0 });
+  });
+});
+
+describe('tts-cache: クラウドTTSのキャッシュキー', () => {
+  it('同じ文・声・モデルは同じキー（.mp3）', () => {
+    const a = ttsCacheKey('Hello world.');
+    const b = ttsCacheKey('Hello world.');
+    assert.equal(a, b);
+    assert.match(a, /^[0-9a-f]{64}\.mp3$/);
+  });
+
+  it('前後空白・連続空白は正規化して同じキーになる', () => {
+    assert.equal(ttsCacheKey('  Hello   world. '), ttsCacheKey('Hello world.'));
+  });
+
+  it('声が違えばキーも変わる', () => {
+    assert.notEqual(
+      ttsCacheKey('Hello world.', { voice: 'alloy' }),
+      ttsCacheKey('Hello world.', { voice: 'nova' }),
+    );
+  });
+
+  it('文が違えばキーも変わる', () => {
+    assert.notEqual(ttsCacheKey('Hello world.'), ttsCacheKey('Goodbye world.'));
   });
 });
