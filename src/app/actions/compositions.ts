@@ -139,11 +139,13 @@ export async function updateComposition(input: {
   courseId: string;
   ja?: string;
   en?: string;
+  /** ★（重点マーク）のトグル。一覧の行・プレイヤーのドリル中の両方から呼ぶ。 */
+  starred?: boolean;
 }): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) return AUTH_REQUIRED;
 
-  const patch: { ja?: string; en?: string } = {};
+  const patch: { ja?: string; en?: string; starred?: boolean } = {};
   if (input.ja !== undefined) {
     const ja = input.ja.trim();
     if (!ja) return { ok: false, error: '日本語を入れてください' };
@@ -153,6 +155,9 @@ export async function updateComposition(input: {
     const en = input.en.trim();
     if (!en) return { ok: false, error: '英語を入れてください' };
     patch.en = en;
+  }
+  if (input.starred !== undefined) {
+    patch.starred = input.starred;
   }
   if (Object.keys(patch).length === 0) return { ok: true, data: undefined };
 

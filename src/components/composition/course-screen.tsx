@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
-import { deleteCourse, updateCourse } from '@/app/actions/compositions';
+import { deleteCourse, updateComposition, updateCourse } from '@/app/actions/compositions';
 import { CompositionManager } from '@/components/composition/composition-manager';
 import { CompositionPlayer, type PlayProgress } from '@/components/composition/composition-player';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils';
 import type { Composition, CompositionCourse } from '@/types/database';
 
 type PlayOrder = 'seq' | 'random';
+type PlayTarget = 'all' | 'starred';
 
 const SETTINGS_KEY = 'composition-play-settings';
 const DEFAULT_INTERVAL = 10;
@@ -67,9 +68,31 @@ export function CourseScreen({
   const router = useRouter();
   const [mode, setMode] = useState<'idle' | 'play'>('idle');
   const [order, setOrder] = useState<PlayOrder>('seq');
+  const [target, setTarget] = useState<PlayTarget>('all');
   const [intervalSec, setIntervalSec] = useState(DEFAULT_INTERVAL);
   const [run, setRun] = useState<{ sequence: Composition[]; startIndex: number } | null>(null);
   const [resume, setResume] = useState<SavedProgress | null>(null);
+
+  // ★（重点マーク）の楽観状態。一覧の行トグルと「★のみ」フィルタの両方がこれを見るので、
+  // サーバ往復（router.refresh）を待たずに一貫させる。プレイヤー中は本画面が unmount され、
+  // 退出時の router.refresh でサーバ値へ寄せ直る。
+  const [starredIds, setStarredIds] = useState<Set<string>>(
+    () => new Set(compositions.filter((c) => c.starred).map((c) => c.id)),
+  );
+  // サーバの★集合が変わったら（他の変更で refresh された等）寄せ直す。楽観トグル中は
+  // このキーが変わらないので、途中の setState を潰さない。
+  const serverStarredKey = compositions
+    .filter((c) => c.starred)
+    .map((c) => c.id)
+    .sort()
+    .join(',');
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setStarredIds(new Set(serverStarredKey ? serverStarredKey.split(',') : []));
+  }, [serverStarredKey]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const starredCount = starredIds.size;
 
   // 前回の設定（順番・秒数）を localStorage から復元。DB には持たない。
   // localStorage は外部ストア。SSR と初期HTMLは既定値で描き、マウント後に一度だけ同期する。
@@ -78,8 +101,9 @@ export function CourseScreen({
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (!raw) return;
-      const s = JSON.parse(raw) as { order?: string; intervalSec?: number };
+      const s = JSON.parse(raw) as { order?: string; target?: string; intervalSec?: number };
       if (s.order === 'seq' || s.order === 'random') setOrder(s.order);
+      if (s.target === 'all' || s.target === 'starred') setTarget(s.target);
       if (typeof s.intervalSec === 'number') {
         setIntervalSec(Math.min(15, Math.max(3, Math.round(s.intervalSec))));
       }
@@ -113,14 +137,46 @@ export function CourseScreen({
   }, [course.id, compositions]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  function persistSettings(next: { order?: PlayOrder; intervalSec?: number }) {
-    const merged = { order: next.order ?? order, intervalSec: next.intervalSec ?? intervalSec };
+  function persistSettings(next: { order?: PlayOrder; target?: PlayTarget; intervalSec?: number }) {
+    const merged = {
+      order: next.order ?? order,
+      target: next.target ?? target,
+      intervalSec: next.intervalSec ?? intervalSec,
+    };
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
     } catch {
       // localStorage 不可でも続行
     }
   }
+
+  // ★のトグル。楽観的に集合を更新し、失敗したら戻す。router.refresh はしない
+  // （本画面が持つ starredIds が正なので、待たせずに反映する）。
+  function toggleStar(composition: Composition) {
+    const next = !starredIds.has(composition.id);
+    setStarredIds((prev) => {
+      const s = new Set(prev);
+      if (next) s.add(composition.id);
+      else s.delete(composition.id);
+      return s;
+    });
+    void updateComposition({ id: composition.id, courseId: composition.course_id, starred: next }).then(
+      (res) => {
+        if (!res.ok) {
+          setStarredIds((prev) => {
+            const s = new Set(prev);
+            if (next) s.delete(composition.id);
+            else s.add(composition.id);
+            return s;
+          });
+          toast.error(res.error);
+        }
+      },
+    );
+  }
+
+  // 再生列に渡す前に、各例文の starred を楽観状態へ上書きする（サーバ props は refresh まで古い）。
+  const withStar = (c: Composition): Composition => ({ ...c, starred: starredIds.has(c.id) });
 
   // 端末で英語の読み上げが鳴るかを、ユーザー操作の中で確かめる（クラウド→失敗時は端末合成）。
   function testVoice() {
@@ -130,7 +186,12 @@ export function CourseScreen({
 
   function startFresh() {
     speaker.unlock(); // 解錠は必ずユーザー操作の中で（iOS 対策）
-    const seq = order === 'random' ? shuffle(compositions) : compositions;
+    // 「★のみ」なら★付きに絞る。登録順は filter で保たれる。
+    const pool = (target === 'starred' ? compositions.filter((c) => starredIds.has(c.id)) : compositions).map(
+      withStar,
+    );
+    if (pool.length === 0) return; // 念のため（ボタンは無効化済み）
+    const seq = order === 'random' ? shuffle(pool) : pool;
     setRun({ sequence: seq, startIndex: 0 });
     setMode('play');
   }
@@ -141,8 +202,12 @@ export function CourseScreen({
       return;
     }
     speaker.unlock();
+    // 再開は保存した並びを再生するだけ（現在の「対象」設定には依らない）。★状態だけ今の値へ寄せる。
     const byId = new Map(compositions.map((c) => [c.id, c]));
-    const seq = resume.ids.map((id) => byId.get(id)).filter((c): c is Composition => !!c);
+    const seq = resume.ids
+      .map((id) => byId.get(id))
+      .filter((c): c is Composition => !!c)
+      .map(withStar);
     const startIndex = Math.min(resume.index, Math.max(0, seq.length - 1));
     setRun({ sequence: seq, startIndex });
     setMode('play');
@@ -173,6 +238,9 @@ export function CourseScreen({
   }
 
   const empty = compositions.length === 0;
+  // 「★のみ」を選んでいるのに★が0件だとスタートできない。
+  const noStarredToPlay = target === 'starred' && starredCount === 0;
+  const canStart = !empty && !noStarredToPlay;
 
   if (mode === 'play' && run) {
     return (
@@ -224,6 +292,47 @@ export function CourseScreen({
             </Button>
           </div>
         )}
+
+        <div className="space-y-1.5">
+          <Label>対象</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setTarget('all');
+                persistSettings({ target: 'all' });
+              }}
+              className={cn(
+                'rounded-lg border p-3 text-sm transition-colors',
+                target === 'all' ? 'border-foreground bg-accent' : 'hover:bg-accent/50',
+              )}
+            >
+              全部
+            </button>
+            <button
+              type="button"
+              disabled={starredCount === 0}
+              onClick={() => {
+                setTarget('starred');
+                persistSettings({ target: 'starred' });
+              }}
+              className={cn(
+                'inline-flex items-center justify-center gap-1.5 rounded-lg border p-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                target === 'starred' ? 'border-foreground bg-accent' : 'hover:bg-accent/50',
+              )}
+            >
+              ★のみ
+              {starredCount > 0 && (
+                <span className="font-mono tabular-nums text-muted-foreground">
+                  {starredCount}
+                </span>
+              )}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            「★のみ」は、もう言える文を飛ばして、★を付けた文だけを流します。
+          </p>
+        </div>
 
         <div className="space-y-1.5">
           <Label>順番</Label>
@@ -278,15 +387,21 @@ export function CourseScreen({
           variant={resume ? 'outline' : 'default'}
           className="w-full"
           onClick={startFresh}
-          disabled={empty}
+          disabled={!canStart}
         >
           <Play className="size-5" />
           {resume ? '最初から' : 'スタート'}
         </Button>
-        {empty && (
+        {empty ? (
           <p className="text-center text-xs text-muted-foreground">
             例文を1件以上登録するとスタートできます。
           </p>
+        ) : (
+          noStarredToPlay && (
+            <p className="text-center text-xs text-muted-foreground">
+              ★を付けた例文がありません。下の一覧か、ドリル中に★を付けてください。
+            </p>
+          )
         )}
 
         {/* 音が出るか事前に確認できるように（ブラウザの読み上げは端末・音量に依存する） */}
@@ -300,7 +415,12 @@ export function CourseScreen({
       </section>
 
       {/* 例文の管理 */}
-      <CompositionManager courseId={course.id} compositions={compositions} />
+      <CompositionManager
+        courseId={course.id}
+        compositions={compositions}
+        starredIds={starredIds}
+        onToggleStar={toggleStar}
+      />
     </div>
   );
 }

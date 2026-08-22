@@ -1,12 +1,14 @@
 'use client';
 
-import { Check, ChevronRight, Eye, Pause, Play, RotateCcw, X } from 'lucide-react';
+import { Check, ChevronRight, Eye, Pause, Play, RotateCcw, Star, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
-import { logCompositionReps } from '@/app/actions/compositions';
+import { logCompositionReps, updateComposition } from '@/app/actions/compositions';
 import { Button } from '@/components/ui/button';
 import { useWakeLock } from '@/hooks/use-wake-lock';
 import * as speaker from '@/lib/speaker';
+import { cn } from '@/lib/utils';
 import type { Composition } from '@/types/database';
 
 export type PlayProgress = { index: number; finished: boolean };
@@ -49,6 +51,11 @@ export function CompositionPlayer({
   const [finished, setFinished] = useState(false);
   const [doneThisRound, setDoneThisRound] = useState(0);
   const [paused, setPaused] = useState(false);
+  // ★（重点マーク）の楽観状態。ドリル中に「言えなかった」文へその場で付け外しできる。
+  // 退出時の router.refresh（CourseScreen 側）でサーバ値へ寄せ直る。
+  const [starredIds, setStarredIds] = useState<Set<string>>(
+    () => new Set(sequence.filter((c) => c.starred).map((c) => c.id)),
+  );
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // revealed / paused は setState が非同期なので、タイマー・onend の割り込み判定は ref（同期）で見る。
@@ -195,6 +202,31 @@ export function CompositionPlayer({
     else pause();
   }
 
+  // ★のトグル。ヘッダーに置くので全画面タップ（次へ）とは別の当たり判定。
+  // トグルのみで、答え表示にも次への送りにも一切繋げない（タイマーにも触れない）。
+  function toggleStar() {
+    const c = sequence[index];
+    if (!c) return;
+    const next = !starredIds.has(c.id);
+    setStarredIds((prev) => {
+      const s = new Set(prev);
+      if (next) s.add(c.id);
+      else s.delete(c.id);
+      return s;
+    });
+    void updateComposition({ id: c.id, courseId, starred: next }).then((res) => {
+      if (!res.ok) {
+        setStarredIds((prev) => {
+          const s = new Set(prev);
+          if (next) s.delete(c.id);
+          else s.add(c.id);
+          return s;
+        });
+        toast.error(res.error);
+      }
+    });
+  }
+
   function restart() {
     clearTimer();
     speaker.cancel();
@@ -234,6 +266,29 @@ export function CompositionPlayer({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {!finished && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleStar}
+              aria-pressed={current ? starredIds.has(current.id) : false}
+              aria-label={
+                current && starredIds.has(current.id)
+                  ? 'この文の★を外す'
+                  : 'この文に★をつける（言えなかった印）'
+              }
+              title="言えなかった文に★（次へは進みません）"
+            >
+              <Star
+                className={cn(
+                  'size-5',
+                  current && starredIds.has(current.id)
+                    ? 'fill-amber-500 text-amber-500'
+                    : 'text-muted-foreground',
+                )}
+              />
+            </Button>
+          )}
           {!finished && (
             <Button
               variant="ghost"
