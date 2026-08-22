@@ -117,6 +117,8 @@ export type Composition = {
   ja: string;
   en: string;
   sort_order: number;
+  /** 「★＝まだ言えない・重点的に練習したい」印。プレイヤーの「★のみ」対象に使う。 */
+  starred: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -190,7 +192,7 @@ export type Database = {
         CompositionCourse,
         'id' | 'description' | 'created_at' | 'updated_at'
       >;
-      compositions: Table<Composition, 'id' | 'sort_order' | 'created_at' | 'updated_at'>;
+      compositions: Table<Composition, 'id' | 'sort_order' | 'starred' | 'created_at' | 'updated_at'>;
       composition_logs: Table<CompositionLog, 'id' | 'course_id' | 'rep_count' | 'practiced_at'>;
     };
     Views: {

@@ -1,6 +1,6 @@
 'use client';
 
-import { Pencil, Plus, Square, Trash2, Upload, Volume2 } from 'lucide-react';
+import { Pencil, Plus, Square, Star, Trash2, Upload, Volume2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -31,11 +31,17 @@ import type { Composition } from '@/types/database';
 export function CompositionManager({
   courseId,
   compositions,
+  starredIds,
+  onToggleStar,
 }: {
   courseId: string;
   compositions: Composition[];
+  /** ★を付けた例文の id 集合（楽観更新は CourseScreen が持つ） */
+  starredIds: Set<string>;
+  onToggleStar: (composition: Composition) => void;
 }) {
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const starredCount = compositions.reduce((n, c) => (starredIds.has(c.id) ? n + 1 : n), 0);
 
   // 一覧を離れる（＝プレイヤーへ切替 / 別ページ）ときは読み上げを止める
   useEffect(() => {
@@ -64,6 +70,12 @@ export function CompositionManager({
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-medium">
           例文 <span className="font-mono tabular-nums">{compositions.length}</span> 件
+          {starredCount > 0 && (
+            <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground">
+              <Star className="size-3.5 fill-amber-500 text-amber-500" />
+              <span className="font-mono tabular-nums">{starredCount}</span> 件
+            </span>
+          )}
         </h2>
         <ImportCsvDialog courseId={courseId} />
       </div>
@@ -81,6 +93,8 @@ export function CompositionManager({
               canPlay
               playing={playingId === c.id}
               onPlay={() => play(c)}
+              starred={starredIds.has(c.id)}
+              onToggleStar={() => onToggleStar(c)}
             />
           ))}
         </ul>
@@ -243,11 +257,15 @@ function CompositionRow({
   canPlay,
   playing,
   onPlay,
+  starred,
+  onToggleStar,
 }: {
   composition: Composition;
   canPlay: boolean;
   playing: boolean;
   onPlay: () => void;
+  starred: boolean;
+  onToggleStar: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -284,6 +302,20 @@ function CompositionRow({
         <p className="text-sm">{composition.ja}</p>
         <p className="mt-0.5 font-mono text-xs text-muted-foreground">{composition.en}</p>
       </div>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={onToggleStar}
+        aria-pressed={starred}
+        aria-label={starred ? '★を外す（重点マーク）' : '★をつける（重点マーク）'}
+        title="まだ言えない・重点的に練習したい文に★"
+        className={cn(
+          'shrink-0 self-center',
+          starred ? 'text-amber-500' : 'text-muted-foreground hover:text-foreground',
+        )}
+      >
+        <Star className={cn('size-4', starred && 'fill-amber-500')} />
+      </Button>
       <EditCompositionDialog composition={composition} />
       <Button
         variant="ghost"
