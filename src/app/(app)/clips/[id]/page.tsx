@@ -17,29 +17,34 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
   if (!clip) notFound();
 
   const typedClip = clip as Clip;
-  const { data: material } = await supabase
-    .from('materials')
-    .select('*')
-    .eq('id', typedClip.material_id)
-    .maybeSingle();
 
-  if (!material) notFound();
+  // 自作テキストは動画（material）を持たない
+  let material: Material | null = null;
+  if (typedClip.source !== 'text' && typedClip.material_id) {
+    const { data } = await supabase
+      .from('materials')
+      .select('*')
+      .eq('id', typedClip.material_id)
+      .maybeSingle();
+    if (!data) notFound();
+    material = data as Material;
+  }
 
   return (
     <div className="space-y-6">
       <header className="space-y-1">
         <Link
-          href={`/materials/${typedClip.material_id}`}
+          href={material ? `/materials/${typedClip.material_id}` : '/materials'}
           className="text-xs text-muted-foreground hover:underline"
         >
-          ← {(material as Material).title}
+          ← {material ? material.title : '素材'}
         </Link>
         <h1 className="font-heading text-xl font-semibold tracking-tight">
           {typedClip.label || 'リプロダクション'}
         </h1>
       </header>
 
-      <Workspace clip={typedClip} material={material as Material} userId={user.id} />
+      <Workspace clip={typedClip} material={material ?? undefined} userId={user.id} />
     </div>
   );
 }

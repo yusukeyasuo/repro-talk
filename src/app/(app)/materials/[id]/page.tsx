@@ -88,7 +88,7 @@ export default async function MaterialPage({
                   >
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-mono tabular-nums">
-                        {formatSeconds(clip.start_sec)} – {formatSeconds(clip.end_sec)}
+                        {formatSeconds(clip.start_sec ?? 0)} – {formatSeconds(clip.end_sec ?? 0)}
                       </span>
                       {clip.transcript ? (
                         <Badge variant="secondary" className="ml-auto">
@@ -109,7 +109,7 @@ export default async function MaterialPage({
                     materialId={typedMaterial.id}
                     label={
                       clip.label ||
-                      `${formatSeconds(clip.start_sec)}–${formatSeconds(clip.end_sec)}`
+                      `${formatSeconds(clip.start_sec ?? 0)}–${formatSeconds(clip.end_sec ?? 0)}`
                     }
                   />
                 </li>

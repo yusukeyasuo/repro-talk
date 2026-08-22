@@ -97,6 +97,16 @@ function getUrl(text: string): Promise<string | null> {
   return urlCache.get(key)!;
 }
 
+/**
+ * 文の音声URLを取りにいく（1セッション内はキャッシュ）。null=クラウド不可。
+ * リプロダクションのワークスペースは playbackRate 制御と聴き比べのため自前の
+ * `<audio>` を持つので、この関数で URL だけ借りて再生は自分で行う。
+ */
+export function getTtsUrl(text: string): Promise<string | null> {
+  if (typeof window === 'undefined' || !text.trim()) return Promise.resolve(null);
+  return getUrl(text);
+}
+
 /** 考える時間のあいだに先に音声URLを取りにいく（体感の遅延を消す）。 */
 export function prefetch(text: string) {
   if (typeof window === 'undefined' || !text.trim()) return;

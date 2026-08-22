@@ -32,17 +32,25 @@ export type Material = {
   thumbnail_url: string | null;
 } & Timestamps;
 
+export type ClipSource = 'youtube' | 'text';
+
 export type Clip = {
   id: string;
   user_id: string;
-  material_id: string;
+  /** source='text' のときは動画を持たないので NULL */
+  material_id: string | null;
   label: string | null;
-  start_sec: number;
-  end_sec: number;
+  /** source='text' のときは区間を持たないので NULL */
+  start_sec: number | null;
+  end_sec: number | null;
   transcript: string;
   translation_ja: string | null;
   annotations: Annotation[];
   memo: string | null;
+  /** 'youtube' = 動画クリップ / 'text' = 自作テキスト */
+  source: ClipSource;
+  /** AI推敲前の原文（source='text' で推敲を採用したときのみ。それ以外は NULL） */
+  source_text: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -164,6 +172,8 @@ export type Database = {
         | 'translation_ja'
         | 'annotations'
         | 'memo'
+        | 'source'
+        | 'source_text'
         | 'created_at'
         | 'updated_at'
       >;

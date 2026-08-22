@@ -15,13 +15,15 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 
 そして、①で入れた表現を②で口から出せたときに両者が繋がる。アプリはこの3つをそのまま3本の導線にしている。
 
+リプロダクションの素材は2系統ある。**YouTube 動画から切り出したクリップ**（元動画の方法そのまま）と、**自分で登録したテキスト**（ニュース・本の一節、あるいは自分で書いてAIで自然に整えた英文）。後者はクラウドTTSで読み上げ、同じ「1文ずつ止めて再現する」ワークスペースで練習する。動画音源のDL・切り出しをしない原則（後述）を守りつつ、L1〜L4の適した動画が見つからない題材や、独り言で言えなかった表現を"完成形"にして再現する導線を足すもの。自作の学習者英語は必ずしも"100"ではないため、任意でAI推敲を挟んで「完成された英語を100のまま受け取る」原則を保てるようにする（原文は残す）。
+
 さらに、元動画の「必要なのは2つ」には**含まれない**補助輪として、森沢洋介式の**瞬間英作文**ドリルを足した（4本目の導線）。日本語を見た瞬間に英語を口から出す訓練で、①で受け取った表現・②で作った表現を「型」として登録し、反射で言えるまで回す。①→②の受け渡しをフレーズ単位で下支えする位置づけ。「成果は担保しない・自動採点はしない」の原則はそのままで、答えは自己採点、画面表示＋音声読み上げはあくまで参照用。
 
 ### 担保すること / しないこと
 
 | | |
 |---|---|
-| **担保する** | 習慣化と可視化。紙とペンでやっていた音の書き込みの代替。ChatGPTへの手動コピペの内製化。①→②のフレーズの受け渡し |
+| **担保する** | 習慣化と可視化。紙とペンでやっていた音の書き込みの代替。ChatGPTへの手動コピペの内製化。①→②のフレーズの受け渡し。動画に頼らずに再現できる自作テキスト素材（クラウドTTSで読み上げ） |
 | **担保しない** | 学習成果。元動画は個人の体験談で再現性の担保はなく、末尾は公式LINEへの誘導になっている |
 | **意図的にやらない** | YouTube音源のダウンロード・切り出し（利用規約違反）。発音の自動採点（精度が出ず、誤った採点は学習者を害する）。音声認識（後述） |
 
@@ -41,11 +43,14 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
    │                    /compositions/[id] ──(スタート)──> プレイヤー
    │                                        （日本語→考える→答え表示＋読み上げ→再現の間→次…）
    │
-/materials/[id] ──(区間を切り出す)──> /clips/[id]
-                                          │
-                                    （フレーズ抽出）
-                                          └──> /monologue の「今日使うフレーズ」へ
+/materials/[id] ──(区間を切り出す)──> /clips/[id]  （YouTube・A-Bループのワークスペース）
+   │                                      │
+   │                                （フレーズ抽出）
+   │                                      └──> /monologue の「今日使うフレーズ」へ
+   └──(テキストを登録／任意でAI推敲)──> /clips/[id]  （自作テキスト・文単位＋TTSのワークスペース）
 ```
+
+`/clips/[id]` は同じルートで、クリップの `source`（`youtube` / `text`）で左カラム（プレイヤー）を出し分ける。右カラム（スクリプト・マーキング・解説・フレーズ抽出）は共通。
 
 認証は `src/proxy.ts`（Next.js 16 の Proxy。旧 `middleware.ts`）で全ページを保護する。
 `/api/` 以下は matcher の対象外なので、各 Route Handler が自分で認証する。
@@ -78,6 +83,15 @@ YouTube URL を貼って登録する。oEmbed でタイトル・チャンネル�
 
 URL は `watch?v=` / `youtu.be/` / `shorts/` / `embed/` / 生のID / プロトコルなし に対応する。
 
+**自作テキスト区分** — L1〜L4 の動画とは別枠で、同じページに「自作テキスト」セクションを持つ。ここは動画（`materials`）を挟まず、`source='text'` のクリップを直接一覧する（各カードは `/clips/[id]` へ。親 material を持たないフラットな並び）。
+
+「テキストを登録」ダイアログ：
+- **タイトル**（任意。クリップの `label` になり、一覧に出る）と **本文**（英語のテキストを貼る／打つ）を入れる
+- **任意で「AIで自然にする」**（`POST /api/ai/naturalize`）。元文と推敲後を並べて確認し、採用すると `transcript`＝推敲後・`source_text`＝元文になる。使わなければ `transcript`＝元文・`source_text`＝NULL。自作の学習者英語を"完成された英語"にしてから再現するための一手間で、外部のネイティブ文章（記事・本の一節など）を貼るときは使わなくてよい
+- 登録すると `source='text'` のクリップを作り、そのままワークスペース（`/clips/[id]`）へ遷移する
+
+削除は一覧のクリップから直接（`deleteClip`。親 material が無いので materials とは独立に消える）。
+
 ### `/materials/[id]` 区間の切り出し
 
 動画を再生しながら「ここから」「ここまで」を打ってクリップを作る。
@@ -86,18 +100,32 @@ URL は `watch?v=` / `youtu.be/` / `shorts/` / `embed/` / 生のID / プロト�
 ### `/clips/[id]` リプロダクション・ワークスペース（中心画面）
 
 紙とペンの代替。左（プレイヤーと録音）／右（スクリプトと解析）の2カラム。
+クリップの `source` で左カラムを出し分ける（`youtube` / `text`）。右カラム（スクリプト・発音マーキング・録音と聴き比べ・解説とフレーズ）は共通で、`clips` テーブルを共有するので注釈・フレーズ抽出・録音・回数記録もそのまま両系統で使える。
 
-**プレイヤー**
+**プレイヤー（`source='youtube'` — YouTubeクリップ）**
 
 - 区間の A-B ループ。`end` パラメータはループしないので `requestAnimationFrame` で終端を監視して `seekTo` する
 - **「1回再生して止める」** — 区間の終わりで自動停止する。リプロダクションの中核操作（シャドーイングとの違い）
 - 再生速度 `0.5 / 0.75 / 1.0`。0.5倍速は「音を顕微鏡で覗く」用
 - 「1回再生して止める」→ 自分で同じように言って **「言えた」** を押すとリプロダクション回数が増え、`practice_logs` に自動記録される。ループ再生・聴くだけは数えない（測るのはリスニング回数ではなく**再現した回数**）
 
+**プレイヤー（`source='text'` — 自作テキスト）**
+
+動画が無いので、YouTube プレイヤーの代わりに **クラウドTTS を鳴らす「文単位プレイヤー」** を置く。方法論の「1文ずつ止めて再現する」に忠実に、テキストを**文単位で回す**。
+
+- スクリプトを `splitSentences()`（`src/lib/transcript.ts`・既存）で文に分け、いま練習する文を1つ大きく出す（何文中の何文目かも表示）
+- **「1文再生して止める」** — その文の TTS 音声（`<audio>`）を鳴らし、末尾で自然に止まる（YouTube のような打ち切りの `requestAnimationFrame` 監視は不要）。音声は `POST /api/tts`（既存・変更なし）で1文ずつ取得。文は必ず `MAX_LEN=500` に収まる
+- 再生速度 `0.5 / 0.75 / 1.0` は **`<audio>.playbackRate`（`preservesPitch=true`）** で効かせる。TTS を速度別に再生成しない（キャッシュを汚さない）。0.5倍速でもピッチが保たれ、YouTube 側と同じ「音を顕微鏡で覗く」体験になる
+- 「1文再生して止める」→ 自分で言って **「言えた」** で1回と数え、`practice_logs` に記録して**次の文へ**進む。**「もう一回」**は数えず同じ文を鳴らし直す。最後の文の「言えた」で1周（クリップ単位のカウント設計は YouTube と同じ＝`clip_id` 単位の `practice_logs`）
+- 体感遅延を消すため、いまの文を鳴らしている間に**次の文の音声をプリフェッチ**する（`speaker.ts` の `prefetch` と同じ考え方。ただしワークスペースは聴き比べ用に自前の `<audio>` を持つので専用の取得経路にする）
+- iOS の `<audio>` 解錠（無音再生を gesture 内で）は独り言・瞬間英作文と同じ。TTS 不可（`OPENAI_API_KEY` 未設定・生成失敗）のときは録音・聴き比べだけが使えず、マーキング等は通常どおり使える
+
 **スクリプト**
 
 スクリプトを貼り付ける。取得は2通り：**「字幕を取得」ブックマークレット**（ブックマークバーにドラッグして登録し、YouTube の動画ページで押すと字幕を `m:ss テキスト` でクリップボードへ入れる）か、従来どおり「文字起こしを表示」からの手動コピペ。**サーバー側の自動取得はしない**（timedtext はデータセンターIPが強くブロックされ、ブラウザ直叩きは CORS で塞がっているため）。ブックマークレットはユーザーのブラウザ・セッションで動くのでブロックを受けず、音源DLもしない。
 ブックマークレットで動画全体を貼っても、「この区間だけ切り出す」で clip の `[start, end)` に重なる字幕行だけへ絞れる（`trimTranscriptToRange`。各キューの終端は次キューの開始で近似し、区間開始をまたぐ字幕も残す）。「タイムスタンプを除去」は `0:00` / `[00:12]` / `(1:02:03)` / 単独行のタイムスタンプと `[音楽]` 等を落とし、字幕の途中改行を連結する。
+
+`source='text'` のクリップでは、スクリプトは登録した本文そのもの（ブックマークレット・区間絞り込みは対象外）。ここでも **「AIで自然にする」**（`POST /api/ai/naturalize`）を後から実行でき、採用すると `transcript` を推敲後へ差し替える。このとき注釈は「貼り直す」と同じく `reanchorAnnotations` で surface（覆っていた部分文字列）を頼りに新テキストへ貼り直し、消えた記号だけ落とす（元文は `source_text` に残す）。
 
 **発音マーキング**
 
@@ -120,6 +148,7 @@ URL は `watch?v=` / `youtu.be/` / `shorts/` / `embed/` / 生のID / プロト�
 
 録音して「交互に聴き比べ」を押すと、お手本 → 自分 → お手本 … を繰り返す。
 シャドーイングと違って声が重ならないので誤魔化しが効かない、というのが元の主張。
+お手本は `source='youtube'` なら区間の音声、`source='text'` なら**いま練習している文の TTS 音声**。どちらも「1回だけ鳴らして自分に渡す」点は同じ（録音・聴き比べは `recordings` に `kind='reproduction'` で保存。text クリップも `clip_id` で紐づく）。
 
 **解説とフレーズ**
 
@@ -195,7 +224,7 @@ Supabase / PostgreSQL。**全テーブル RLS 有効、`user_id = auth.uid()` �
 |---|---|---|
 | `profiles` | `id`(=auth.users.id), `display_name`, `why_text`, `daily_goal_sec`, `created_at`, `updated_at` | サインアップ時にトリガで自動生成 |
 | `materials` | `id`, `user_id`, `youtube_video_id`, `title`, `channel_name`, `level`, `thumbnail_url`, `created_at` | 素材。`(user_id, youtube_video_id)` で一意 |
-| `clips` | `id`, `user_id`, `material_id`, `label`, `start_sec`, `end_sec`, `transcript`, `translation_ja`, `annotations`(jsonb), `memo`, `created_at`, `updated_at` | 練習区間。ノート1ページに相当 |
+| `clips` | `id`, `user_id`, `material_id`, `label`, `start_sec`, `end_sec`, `transcript`, `translation_ja`, `annotations`(jsonb), `memo`, `source`, `source_text`, `created_at`, `updated_at` | 練習区間（ノート1ページ）。**2系統**：`source='youtube'` は `material_id`＋`start_sec/end_sec` を持つ動画クリップ、`source='text'` は `material_id`/`start_sec`/`end_sec` が **NULL**・`transcript` にユーザーの英文・`source_text` にAI推敲前の原文（未推敲なら NULL）を持つ自作テキスト（`migration 0007`） |
 | `practice_logs` | `id`, `user_id`, `clip_id`, `rep_count`, `practiced_at` | リプロダクションの反復記録 |
 | `monologue_topics` | `id`, `user_id`, `title_en`, `title_ja`, `category`, `sort_order`, `created_at` | `user_id` が NULL のものは共通シード30件 |
 | `monologue_sessions` | `id`, `user_id`, `topic_id`, `mode`, `duration_sec`, `ja_memo`, `ai_suggestions`(jsonb), `used_phrase_ids`, `started_at` | 独り言1回分 |
@@ -207,6 +236,8 @@ Supabase / PostgreSQL。**全テーブル RLS 有効、`user_id = auth.uid()` �
 | `daily_activity`（ビュー） | `user_id`, `activity_date`, `reproduction_reps`, `monologue_sec`, `recording_sec`, `composition_reps` | 継続トラッキング用。`security_invoker = on` で RLS を継承 |
 
 `monologue_topics` だけ SELECT ポリシーが `user_id is null or auth.uid() = user_id`（共通シードを全員が読む）。
+
+**`migration 0007`（自作テキストのリプロダクション）** — 新テーブルを増やさず `clips` を拡張する。`material_id`・`start_sec`・`end_sec` を **nullable** にし、`source text not null default 'youtube'`（`check (source in ('youtube','text'))`）と `source_text text` を足す。既存の `end_sec > 0` / `end_sec > start_sec` の制約は source 条件つきに置き換える：`check (source <> 'youtube' or (material_id is not null and start_sec is not null and end_sec is not null and start_sec >= 0 and end_sec > start_sec))`、および `check (source <> 'text' or material_id is null)`（テキストは動画を参照しない）。既存行は `source='youtube'` になり互換。RLS（`clips_all_own`）・関連する FK（`practice_logs`・`recordings`・`phrases` の `clip_id`）はそのまま両系統に効く。`Clip` 型は `material_id`/`start_sec`/`end_sec` が `string|null`/`number|null`、`source: 'youtube'|'text'`、`source_text: string|null` になり、ワークスペースの `material` prop は `source='text'` で無し。
 
 **Storage** — `recordings` バケット（非公開）。パスは `<user_id>/<kind>/<uuid>.<ext>`。
 `storage.foldername(name)[1] = auth.uid()` のポリシーで他人のフォルダに触れない。
@@ -242,6 +273,7 @@ type Annotation = {
 | `POST /api/ai/annotate` | `transcript` | `translation_ja`, `annotations[]` | `high` | 16000 |
 | `POST /api/ai/explain` | `transcript`, `selection`, `question` | `headline`, `explanation`, `examples[{en, ja, when}]` | `high` | 16000 |
 | `POST /api/ai/phrases` | `transcript` | `phrases[{text, meaning_ja, why}]` | `medium` | 8000 |
+| `POST /api/ai/naturalize` | `text`, `note?`(言いたいこと) | `naturalized`, `note_ja`(どう自然にしたか・1〜2文) | `medium` | 4000 |
 | `POST /api/ai/monologue-feedback` | `ja_memo`, `topic` | `suggestions[{text, meaning_ja, examples[]}]` | `medium` | 8000 |
 
 **共通の約束事**
@@ -254,6 +286,8 @@ type Annotation = {
 - `fallbacks: 'default'`（beta `server-side-fallback-2026-07-01`）を既定で有効
 - システムプロンプト（`src/lib/ai/prompts.ts`）は `cache_control` でキャッシュする。**頻繁に編集するとキャッシュが無効化される**
 - `annotate` は文字インデックスではなく **quote（該当部分の逐語コピー）＋ occurrence（何番目か）** を返させ、サーバ側で文字列照合してオフセットを復元する（LLM の整数オフセット誤差を原理的に避ける）。`resolveAiAnnotations`（`src/lib/annotation-anchor.ts`）を経由し、最後に `normalizeAnnotations` を通す
+
+`naturalize` は自作テキストを"完成された英語"に寄せるための任意ステップ。**意味を保ったまま**ネイティブが自然に言う英語へ書き換える（大意を変えない・過剰な言い換えをしない）方針で、`note_ja` に主な直し（冠詞・時制・自然な語順など）を1〜2文で添える。学習者英語を100に近づけて再現原則を守るためのもので、外部のネイティブ文章にはそもそも不要。採用は任意で、採用しなければ原文をそのまま再現する。他のエンドポイントと同じく `runStructured()` 経由・refusal 分岐あり。
 
 **音声認識は入れていない。** Claude API に音声入力はなく、Web Speech API は Chrome 限定で精度も不安定。
 元動画自身が「録音は聞き返すためではなく可視化のため」と言っているので、日本語メモ → AI 変換のほうが忠実で確実だと判断した。
@@ -270,7 +304,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | ファイル | 関数 |
 |---|---|
 | `materials.ts` | `createMaterial`, `deleteMaterial` |
-| `clips.ts` | `createClip`, `updateClip`, `deleteClip`, `logPractice` |
+| `clips.ts` | `createClip`, `createTextClip`(source='text'), `updateClip`(`source_text` も受ける), `deleteClip`, `logPractice` |
 | `phrases.ts` | `addPhrases`, `markPhraseUsed`, `deletePhrase` |
 | `monologue.ts` | `saveMonologueSession`, `saveMonologueFeedback`, `addCustomTopic` |
 | `compositions.ts` | `createCourse`, `updateCourse`, `deleteCourse`, `addComposition`, `updateComposition`, `deleteComposition`, `importCompositions`, `logCompositionReps` |
@@ -300,12 +334,15 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | `speechSynthesis` は使ううちにエンジンが固まる（無音化） | 固まると voice はあるのに `start` が来ず、**リロードでは戻らずブラウザ再起動が要る**（音声サービス側の固着）。→ 読み上げの主経路を**クラウドTTS＋`<audio>`再生**に変更し、`speechSynthesis` は未設定/失敗時のフォールバックへ降格（固着ゼロ）。フォールバック用に発話中は `resume()` の keepalive（8秒毎）だけ残す |
 | Route Handler から Storage に書けない（RLS 403） | ①`storage.upload()` に `ArrayBuffer` を渡すと壊れる→Storage REST に生バイトで送る ②storage の RLS は `to authenticated` が効かない→`auth.uid()` で判定 ③SSR サーバクライアントはユーザー JWT を storage に載せられず（`/api` は proxy 対象外で失効も絡む）認証済みでも 403→**サーバ専用の service role キーで保存**（認証は `getUser` で担保） |
 | CSV の文にカンマ・引用符が混じる | 例文がカンマを含む前提で RFC4180 パースし、タブ区切りも受ける。自前パーサをユニットテスト対象にする |
+| TTS の入力は `MAX_LEN=500` 文字まで（`/api/tts`） | 自作テキストは `splitSentences()` で**文単位に分割してから1文ずつ生成**する。1文は必ず 500 に収まる。全文を一度に投げない |
+| 自作テキストの再生速度（0.5/0.75/1.0） | TTS を速度別に再生成せず、`<audio>.playbackRate` に `preservesPitch=true` を併用してクライアント側で変速する。キャッシュ（content-hash）を汚さず、0.5倍でもピッチが保たれる |
+| 自作テキストには動画が無い | `clips.source` で左カラムを分岐し、`source='text'` では YouTube プレイヤーを出さない。`/clips/[id]` は material 無しでも 404 にしない（従来は material 必須だった） |
 
 ---
 
 ## 7. 検証状況
 
-2026-08-01 時点（本番反映・クラウドTTS は 2026-08-20 に追記）。ローカル Supabase（Docker）を立てて実際に通した結果と、本番（クラウド Supabase / Vercel）で確認した結果。
+2026-08-01 時点（本番反映・クラウドTTS は 2026-08-20 に追記／自作テキストのリプロダクションは 2026-08-22 に**設計のみ**を追記）。ローカル Supabase（Docker）を立てて実際に通した結果と、本番（クラウド Supabase / Vercel）で確認した結果。
 
 ### 検証済み
 
@@ -327,12 +364,15 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | **例文の★と「★のみ」で流す**（`migration 0006`・Playwright/ログイン状態） | ローカルに 0006 適用（`compositions.starred` = boolean NOT NULL default false）。一覧の★トグルが `compositions.starred` に永続、ヘッダの★件数表示と「★のみ」の有効/無効化（0件なら不可）を確認。「★のみ」で開始すると★付きだけが流れる（2件→「2文」で1周完了）ことを確認。**ドリル中の★タップは答え表示も次への送りもせずトグルのみ**（考える時間中に押しても `1/2`・`完了 0`・「考える時間」のまま）で、DB へ永続することを確認。**本番（クラウド Supabase）へは未適用** |
 | **瞬間英作文の本番反映**（0004/0005 をクラウド Supabase に適用） | CI のマイグレーション→デプロイ順で適用済み。本番でプレイヤーとクラウドTTSが動作することを確認 |
 | **クラウドTTSの本番動作**（`POST /api/tts`→`tts` バケット→`<audio>` 再生） | ローカルで生成200（約2.6秒）・2回目 `cached:true` 68ms・public URL の音声 HEAD 200。**本番でも生成・保存・再生を確認**（本番 Storage は新形式 `sb_secret_` ではなく legacy `service_role` JWT が要ると判明して解決） |
-| ビルド / Lint / ユニットテスト49件 | 全通過（CSV/TSV パース・瞬間英作文の連続日数/ヒートマップを追加） |
+| **自作テキストの `migration 0007`**（`clips` に `source`/`source_text` 追加・`material_id`/`start_sec`/`end_sec` を nullable 化・source 別 CHECK） | ローカルへ適用を確認。既存クリップは `source='youtube'` にバックフィル、text クリップ（range NULL）は insert 成功、`source='text'` に material_id を付けると `clips_text_shape` 違反、`source='youtube'` に range NULL だと `clips_youtube_shape` 違反になることを確認。既存の `end_sec > 0` 等は NULL を素通しするので drop 不要 |
+| ビルド / Lint / ユニットテスト53件 | 全通過（`next build` で `/api/ai/naturalize` 含む全ルート生成、`tsc --noEmit`・eslint クリーン） |
 
 ### 未検証
 
 | 対象 | 理由 |
 |---|---|
+| **自作テキストのリプロダクションの通しUI**（テキスト登録→任意でAI推敲→文単位で再現→回数記録／聴き比べ／マーキング） | 実装済み。**ブラウザ通し（Playwright）は未実施**。実機の `<audio>` 解錠・TTS 再生・「言えた」で `practice_logs` 加算・reanchor（推敲差し替え時）を通しで確認する必要がある |
+| **自作テキストの本番反映**（`migration 0007` のクラウド Supabase 適用） | ローカルには適用・検証済みだが本番へは未適用（CI のマイグレーション→デプロイ順で流す）。`/api/ai/naturalize` は `ANTHROPIC_API_KEY`、TTS は `OPENAI_API_KEY` 前提 |
 | **例文の★の本番反映**（`migration 0006` のクラウド Supabase 適用） | ローカルでは適用・動作確認済みだが、本番へは未適用（0006 を CI のマイグレーション→デプロイ順で流す必要がある） |
 | **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
 | **録音の実機保存**（Storage アップロード＋メタデータ行） | ヘッドレスブラウザにマイクがないため |

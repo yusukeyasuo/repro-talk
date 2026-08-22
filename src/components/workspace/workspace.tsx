@@ -11,7 +11,7 @@ import {
   Square,
   Sparkles,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { logPractice, updateClip } from '@/app/actions/clips';
@@ -20,6 +20,7 @@ import { AnnotationEditor } from '@/components/annotation/annotation-editor';
 import { YouTubePlayer, type PlayerHandle } from '@/components/player/youtube-player';
 import { ExplainPanel } from '@/components/workspace/explain-panel';
 import { PhrasePanel } from '@/components/workspace/phrase-panel';
+import { SentencePlayer, type SentencePlayerHandle } from '@/components/workspace/sentence-player';
 import { TranscriptInput } from '@/components/workspace/transcript-input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,20 +28,27 @@ import { Textarea } from '@/components/ui/textarea';
 import { extensionForMimeType, useRecorder, type RecordedClip } from '@/hooks/use-recorder';
 import { reanchorAnnotations } from '@/lib/annotation-anchor';
 import { createClient } from '@/lib/supabase/client';
+import { splitSentences } from '@/lib/transcript';
 import { formatSeconds } from '@/lib/youtube';
 import { normalizeAnnotations, type Annotation } from '@/types/annotation';
 import type { Clip, Material } from '@/types/database';
 
 const RATES = [0.5, 0.75, 1] as const;
 
+type Suggestion = { naturalized: string; note_ja: string };
+
 type Props = {
   clip: Clip;
-  material: Material;
+  /** source='text' のときは動画を持たないので undefined */
+  material?: Material;
   userId: string;
 };
 
 export function Workspace({ clip, material, userId }: Props) {
+  const isText = clip.source === 'text';
+
   const playerRef = useRef<PlayerHandle>(null);
+  const sentencePlayerRef = useRef<SentencePlayerHandle>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const abRef = useRef(false);
 
@@ -49,6 +57,16 @@ export function Workspace({ clip, material, userId }: Props) {
   const [translation, setTranslation] = useState(clip.translation_ja ?? '');
   const [annotations, setAnnotations] = useState<Annotation[]>(clip.annotations ?? []);
   const [memo, setMemo] = useState(clip.memo ?? '');
+
+  // 自作テキストは文単位で回す
+  const sentences = useMemo(
+    () => (isText ? splitSentences(transcript).map((s) => s.text) : []),
+    [isText, transcript],
+  );
+  const [sentenceIndex, setSentenceIndex] = useState(0);
+  const [draft, setDraft] = useState(''); // text の本文編集ドラフト
+  const [naturalizing, setNaturalizing] = useState(false);
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
 
   const [rate, setRate] = useState<number>(1);
   const [loop, setLoop] = useState(false);
@@ -69,8 +87,12 @@ export function Workspace({ clip, material, userId }: Props) {
   const recorder = useRecorder();
 
   useEffect(() => {
-    playerRef.current?.setRate(rate);
-  }, [rate]);
+    if (isText) sentencePlayerRef.current?.setRate(rate);
+    else playerRef.current?.setRate(rate);
+  }, [rate, isText]);
+
+  // 本文が変わって文数が減っても範囲外にならないよう、読むときに丸める
+  const currentIndex = sentences.length > 0 ? Math.min(sentenceIndex, sentences.length - 1) : 0;
 
   // Blob URL を後片付けする
   useEffect(() => {
@@ -84,10 +106,19 @@ export function Workspace({ clip, material, userId }: Props) {
   // 録音に切り替わらないため、聴き比べ中は常に once で呼ぶ。
   const playModel = useCallback(
     ({ once = false }: { once?: boolean } = {}) => {
-      playerRef.current?.playRange(clip.start_sec, clip.end_sec, once ? false : loop);
+      if (isText) {
+        sentencePlayerRef.current?.play({ loop: once ? false : loop });
+        return;
+      }
+      playerRef.current?.playRange(clip.start_sec ?? 0, clip.end_sec ?? 0, once ? false : loop);
     },
-    [clip.start_sec, clip.end_sec, loop],
+    [isText, clip.start_sec, clip.end_sec, loop],
   );
+
+  const pauseModel = useCallback(() => {
+    if (isText) sentencePlayerRef.current?.pause();
+    else playerRef.current?.pause();
+  }, [isText]);
 
   const playSelf = useCallback(() => {
     const audio = audioRef.current;
@@ -111,11 +142,14 @@ export function Workspace({ clip, material, userId }: Props) {
     if (!loop) setPendingRep(true);
   }
 
-  /** 「言えた」を押したときだけ回数を数える。 */
+  /** 「言えた」を押したときだけ回数を数える。text は次の文へ進む。 */
   function confirmRep() {
     setPendingRep(false);
     setReps((count) => count + 1);
     setRepSaveState('saving');
+    if (isText) {
+      setSentenceIndex(currentIndex + 1 < sentences.length ? currentIndex + 1 : currentIndex);
+    }
   }
 
   /** 数えずにもう一度お手本を再生する（終端でまた「言えた」待ちになる）。 */
@@ -135,7 +169,7 @@ export function Workspace({ clip, material, userId }: Props) {
   function stopAb() {
     abRef.current = false;
     setAbRunning(false);
-    playerRef.current?.pause();
+    pauseModel();
     audioRef.current?.pause();
   }
 
@@ -151,7 +185,7 @@ export function Workspace({ clip, material, userId }: Props) {
     // 録音中はお手本と被らないよう止める
     stopAb();
     setPendingRep(false);
-    playerRef.current?.pause();
+    pauseModel();
     await recorder.start();
   }
 
@@ -207,6 +241,61 @@ export function Workspace({ clip, material, userId }: Props) {
     } finally {
       setAnalyzing(false);
     }
+  }
+
+  // 自作テキストを「完成された英語」に整える（任意）。採用すると transcript を差し替え、
+  // 記号は surface で新テキストへ貼り直し、元文は source_text に残す。
+  async function naturalize() {
+    if (!transcript) return;
+    setNaturalizing(true);
+    setSuggestion(null);
+    try {
+      const res = await fetch('/api/ai/naturalize', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: transcript }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error ?? '推敲に失敗しました');
+        return;
+      }
+      setSuggestion({ naturalized: json.naturalized ?? '', note_ja: json.note_ja ?? '' });
+    } catch {
+      toast.error('通信に失敗しました');
+    } finally {
+      setNaturalizing(false);
+    }
+  }
+
+  function adoptSuggestion() {
+    if (!suggestion) return;
+    const next = suggestion.naturalized;
+    const original = transcript;
+    const { annotations: reanchored, dropped } = reanchorAnnotations(annotations, transcript, next);
+    startTransition(async () => {
+      const result = await updateClip({
+        id: clip.id,
+        transcript: next,
+        annotations: reanchored,
+        translationJa: null,
+        sourceText: original,
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      setTranscript(next);
+      setAnnotations(reanchored);
+      setTranslation('');
+      setSuggestion(null);
+      setSentenceIndex(0);
+      toast.success(
+        dropped > 0
+          ? `推敲後を採用しました（${dropped}個の記号は文が変わったため外しました）`
+          : '推敲後を採用しました',
+      );
+    });
   }
 
   // 自動保存：和訳・マーキング・メモ・AI解析結果が変わったら少し待って保存する。
@@ -268,6 +357,7 @@ export function Workspace({ clip, material, userId }: Props) {
       setAnnotations(reanchored);
       setTranslation('');
       setEditingTranscript(false);
+      if (isText) setSentenceIndex(0);
       toast.success(
         dropped > 0
           ? `スクリプトを保存しました（${dropped}個の記号は文が変わったため外しました）`
@@ -326,27 +416,49 @@ export function Workspace({ clip, material, userId }: Props) {
     <div className="grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
       {/* 左: プレイヤーと録音 */}
       <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-        <YouTubePlayer
-          ref={playerRef}
-          videoId={material.youtube_video_id}
-          onRangeEnd={handleRangeEnd}
-          onPlayingChange={setPlaying}
-        />
+        {isText ? (
+          <SentencePlayer
+            ref={sentencePlayerRef}
+            sentences={sentences}
+            index={currentIndex}
+            rate={rate}
+            onIndexChange={(i) => {
+              pauseModel();
+              setPendingRep(false);
+              setSentenceIndex(i);
+            }}
+            onSentenceEnd={handleRangeEnd}
+            onPlayingChange={setPlaying}
+          />
+        ) : (
+          <YouTubePlayer
+            ref={playerRef}
+            videoId={material?.youtube_video_id ?? ''}
+            onRangeEnd={handleRangeEnd}
+            onPlayingChange={setPlaying}
+          />
+        )}
 
         <div className="space-y-3 rounded-lg border p-4">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="font-mono tabular-nums">
-              {formatSeconds(clip.start_sec)} – {formatSeconds(clip.end_sec)}
-            </span>
-            <span>{Math.round(clip.end_sec - clip.start_sec)}秒</span>
-          </div>
+          {isText ? (
+            <p className="text-xs text-muted-foreground">
+              文を1つ再生して止め、同じように言えたら「言えた」を押します。次の文へ進みます。
+            </p>
+          ) : (
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-mono tabular-nums">
+                {formatSeconds(clip.start_sec ?? 0)} – {formatSeconds(clip.end_sec ?? 0)}
+              </span>
+              <span>{Math.round((clip.end_sec ?? 0) - (clip.start_sec ?? 0))}秒</span>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               onClick={
                 playing
-                  ? () => playerRef.current?.pause()
+                  ? () => pauseModel()
                   : () => {
                       setPendingRep(false);
                       playModel();
@@ -354,7 +466,13 @@ export function Workspace({ clip, material, userId }: Props) {
               }
             >
               {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
-              {playing ? '止める' : loop ? 'ループ再生' : '1回再生して止める'}
+              {playing
+                ? '止める'
+                : loop
+                  ? 'ループ再生'
+                  : isText
+                    ? '1文再生して止める'
+                    : '1回再生して止める'}
             </Button>
             <Button
               size="sm"
@@ -485,8 +603,21 @@ export function Workspace({ clip, material, userId }: Props) {
             <h2 className="text-sm font-medium">スクリプト</h2>
             <div className="flex flex-wrap gap-2">
               {!editingTranscript && (
-                <Button size="sm" variant="ghost" onClick={() => setEditingTranscript(true)}>
-                  貼り直す
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if (isText) setDraft(transcript);
+                    setEditingTranscript(true);
+                  }}
+                >
+                  {isText ? '本文を編集' : '貼り直す'}
+                </Button>
+              )}
+              {isText && transcript && !editingTranscript && (
+                <Button size="sm" variant="outline" onClick={naturalize} disabled={naturalizing}>
+                  <Sparkles className="size-4" />
+                  {naturalizing ? '推敲中…' : 'AIで自然にする'}
                 </Button>
               )}
               {transcript && !editingTranscript && (
@@ -514,15 +645,45 @@ export function Workspace({ clip, material, userId }: Props) {
           </div>
 
           {editingTranscript ? (
-            <TranscriptInput
-              initialValue={transcript}
-              onSave={saveTranscript}
-              onCancel={transcript ? () => setEditingTranscript(false) : undefined}
-              saving={pending}
-              startSec={clip.start_sec}
-              endSec={clip.end_sec}
-              youtubeVideoId={material.youtube_video_id}
-            />
+            isText ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  rows={6}
+                  placeholder="ここに英語のテキストを入れます。"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => saveTranscript(draft)}
+                    disabled={pending || !draft.trim()}
+                  >
+                    {pending ? '保存中…' : '保存'}
+                  </Button>
+                  {transcript && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingTranscript(false)}
+                      disabled={pending}
+                    >
+                      キャンセル
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <TranscriptInput
+                initialValue={transcript}
+                onSave={saveTranscript}
+                onCancel={transcript ? () => setEditingTranscript(false) : undefined}
+                saving={pending}
+                startSec={clip.start_sec ?? 0}
+                endSec={clip.end_sec ?? 0}
+                youtubeVideoId={material?.youtube_video_id ?? ''}
+              />
+            )
           ) : (
             <AnnotationEditor
               text={transcript}
@@ -532,6 +693,24 @@ export function Workspace({ clip, material, userId }: Props) {
                 setDirty(true);
               }}
             />
+          )}
+
+          {suggestion && !editingTranscript && (
+            <div className="space-y-2 rounded-lg border bg-accent/30 p-3">
+              <p className="text-xs text-muted-foreground">推敲後</p>
+              <p className="text-sm leading-relaxed">{suggestion.naturalized}</p>
+              {suggestion.note_ja && (
+                <p className="text-xs text-muted-foreground">{suggestion.note_ja}</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={adoptSuggestion} disabled={pending}>
+                  この英文を採用
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSuggestion(null)}>
+                  使わない
+                </Button>
+              </div>
+            </div>
           )}
         </section>
 
