@@ -39,6 +39,41 @@ export async function createClip(input: {
   return { ok: true, data: { id: data.id } };
 }
 
+/** 自作テキストのクリップを作る。動画を持たず、transcript が練習対象そのもの。 */
+export async function createTextClip(input: {
+  label?: string;
+  transcript: string;
+  /** AI推敲を採用したときの元文。未推敲なら渡さない。 */
+  sourceText?: string | null;
+}): Promise<ActionResult<{ id: string }>> {
+  const user = await getCurrentUser();
+  if (!user) return AUTH_REQUIRED;
+
+  const transcript = input.transcript.trim();
+  if (!transcript) return { ok: false, error: '本文を入力してください' };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('clips')
+    .insert({
+      user_id: user.id,
+      source: 'text',
+      material_id: null,
+      start_sec: null,
+      end_sec: null,
+      transcript,
+      source_text: input.sourceText?.trim() || null,
+      label: input.label?.trim() || null,
+    })
+    .select('id')
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/materials');
+  return { ok: true, data: { id: data.id } };
+}
+
 export async function updateClip(input: {
   id: string;
   transcript?: string;
@@ -48,6 +83,7 @@ export async function updateClip(input: {
   label?: string | null;
   startSec?: number;
   endSec?: number;
+  sourceText?: string | null;
 }): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) return AUTH_REQUIRED;
@@ -61,6 +97,7 @@ export async function updateClip(input: {
   if (input.label !== undefined) patch.label = input.label;
   if (input.startSec !== undefined) patch.start_sec = input.startSec;
   if (input.endSec !== undefined) patch.end_sec = input.endSec;
+  if (input.sourceText !== undefined) patch.source_text = input.sourceText;
 
   if (input.annotations !== undefined) {
     // transcript も同時に変わるならその長さで、変わらないなら保存済みの長さで丸める
@@ -87,7 +124,8 @@ export async function updateClip(input: {
 
 export async function deleteClip(input: {
   id: string;
-  materialId: string;
+  /** 動画クリップのときだけ渡す。自作テキストは material を持たない。 */
+  materialId?: string | null;
 }): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) return AUTH_REQUIRED;
@@ -107,7 +145,8 @@ export async function deleteClip(input: {
   const { error } = await supabase.from('clips').delete().eq('id', input.id);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath(`/materials/${input.materialId}`);
+  if (input.materialId) revalidatePath(`/materials/${input.materialId}`);
+  revalidatePath('/materials');
   revalidatePath('/');
   return { ok: true, data: undefined };
 }

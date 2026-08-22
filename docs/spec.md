@@ -364,13 +364,15 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | **例文の★と「★のみ」で流す**（`migration 0006`・Playwright/ログイン状態） | ローカルに 0006 適用（`compositions.starred` = boolean NOT NULL default false）。一覧の★トグルが `compositions.starred` に永続、ヘッダの★件数表示と「★のみ」の有効/無効化（0件なら不可）を確認。「★のみ」で開始すると★付きだけが流れる（2件→「2文」で1周完了）ことを確認。**ドリル中の★タップは答え表示も次への送りもせずトグルのみ**（考える時間中に押しても `1/2`・`完了 0`・「考える時間」のまま）で、DB へ永続することを確認。**本番（クラウド Supabase）へは未適用** |
 | **瞬間英作文の本番反映**（0004/0005 をクラウド Supabase に適用） | CI のマイグレーション→デプロイ順で適用済み。本番でプレイヤーとクラウドTTSが動作することを確認 |
 | **クラウドTTSの本番動作**（`POST /api/tts`→`tts` バケット→`<audio>` 再生） | ローカルで生成200（約2.6秒）・2回目 `cached:true` 68ms・public URL の音声 HEAD 200。**本番でも生成・保存・再生を確認**（本番 Storage は新形式 `sb_secret_` ではなく legacy `service_role` JWT が要ると判明して解決） |
-| ビルド / Lint / ユニットテスト49件 | 全通過（CSV/TSV パース・瞬間英作文の連続日数/ヒートマップを追加） |
+| **自作テキストの `migration 0007`**（`clips` に `source`/`source_text` 追加・`material_id`/`start_sec`/`end_sec` を nullable 化・source 別 CHECK） | ローカルへ適用を確認。既存クリップは `source='youtube'` にバックフィル、text クリップ（range NULL）は insert 成功、`source='text'` に material_id を付けると `clips_text_shape` 違反、`source='youtube'` に range NULL だと `clips_youtube_shape` 違反になることを確認。既存の `end_sec > 0` 等は NULL を素通しするので drop 不要 |
+| ビルド / Lint / ユニットテスト53件 | 全通過（`next build` で `/api/ai/naturalize` 含む全ルート生成、`tsc --noEmit`・eslint クリーン） |
 
 ### 未検証
 
 | 対象 | 理由 |
 |---|---|
-| **自作テキストのリプロダクション**（本仕様で新規設計・`migration 0007`／`/api/ai/naturalize`／文単位TTSプレイヤー／`/materials` の自作テキスト区分） | **未実装**。本節（1〜6）の記述はこれから作る目標状態で、コードはまだ無い。実装後に「テキスト登録→（任意でAI推敲）→文単位で再現→回数記録／聴き比べ／マーキング」を通しで検証し、`clips` の source 分岐・nullable 制約・reanchor（推敲差し替え時）を確認する |
+| **自作テキストのリプロダクションの通しUI**（テキスト登録→任意でAI推敲→文単位で再現→回数記録／聴き比べ／マーキング） | 実装済み。**ブラウザ通し（Playwright）は未実施**。実機の `<audio>` 解錠・TTS 再生・「言えた」で `practice_logs` 加算・reanchor（推敲差し替え時）を通しで確認する必要がある |
+| **自作テキストの本番反映**（`migration 0007` のクラウド Supabase 適用） | ローカルには適用・検証済みだが本番へは未適用（CI のマイグレーション→デプロイ順で流す）。`/api/ai/naturalize` は `ANTHROPIC_API_KEY`、TTS は `OPENAI_API_KEY` 前提 |
 | **例文の★の本番反映**（`migration 0006` のクラウド Supabase 適用） | ローカルでは適用・動作確認済みだが、本番へは未適用（0006 を CI のマイグレーション→デプロイ順で流す必要がある） |
 | **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
 | **録音の実機保存**（Storage アップロード＋メタデータ行） | ヘッドレスブラウザにマイクがないため |

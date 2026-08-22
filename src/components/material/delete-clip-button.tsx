@@ -23,7 +23,8 @@ export function DeleteClipButton({
   label,
 }: {
   id: string;
-  materialId: string;
+  /** 動画クリップのときだけ渡す。自作テキストは material を持たない。 */
+  materialId?: string | null;
   label: string;
 }) {
   const router = useRouter();
