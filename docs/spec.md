@@ -300,7 +300,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 
 ## 7. 検証状況
 
-2026-08-01 時点。ローカル Supabase（Docker）を立てて実際に通した結果。
+2026-08-01 時点（本番反映・クラウドTTS は 2026-08-20 に追記）。ローカル Supabase（Docker）を立てて実際に通した結果と、本番（クラウド Supabase / Vercel）で確認した結果。
 
 ### 検証済み
 
@@ -318,7 +318,9 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | プロフィール保存とダッシュボードへの反映 | 通過 |
 | **瞬間英作文のマイグレーション0004**（3テーブル・全RLS・FK・`daily_activity` へ `composition_reps` 追加） | ローカルへ適用を確認。`compositions` は course 削除で cascade、`composition_logs.course_id` は set null |
 | **瞬間英作文のビュー集計**（`composition_logs` → `daily_activity.composition_reps`、JST 日付境界） | 実データ1件で 7 回が集計されること、コース削除後も log が `course_id=null` で残る（連続日数を巻き戻さない）ことを確認 |
-| **瞬間英作文のプレイヤー**（Playwright・ログイン状態） | 残り時間ゲージの表示、中断→「続きから」で保存位置から再開、1文=1回の都度記録（DB に `rep_count:1` が +N 行）、一覧の行の読み上げ発火を確認 |
+| **瞬間英作文のプレイヤー**（Playwright・ログイン状態） | 残り時間ゲージの表示、中断→「続きから」で保存位置から再開、1文=1回の都度記録（DB に `rep_count:1` が +N 行）、一覧の行の読み上げ発火、答え読み上げ後の**再現の間（約3秒）で次へ送る**ことを確認 |
+| **瞬間英作文の本番反映**（0004/0005 をクラウド Supabase に適用） | CI のマイグレーション→デプロイ順で適用済み。本番でプレイヤーとクラウドTTSが動作することを確認 |
+| **クラウドTTSの本番動作**（`POST /api/tts`→`tts` バケット→`<audio>` 再生） | ローカルで生成200（約2.6秒）・2回目 `cached:true` 68ms・public URL の音声 HEAD 200。**本番でも生成・保存・再生を確認**（本番 Storage は新形式 `sb_secret_` ではなく legacy `service_role` JWT が要ると判明して解決） |
 | ビルド / Lint / ユニットテスト49件 | 全通過（CSV/TSV パース・瞬間英作文の連続日数/ヒートマップを追加） |
 
 ### 未検証
@@ -327,9 +329,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 |---|---|
 | **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
 | **録音の実機保存**（Storage アップロード＋メタデータ行） | ヘッドレスブラウザにマイクがないため |
-| **瞬間英作文の本番反映** | マイグレーション0004/0005はローカルのみ適用。本番（クラウド Supabase）へは未適用 |
-| **クラウドTTS**（`POST /api/tts` の OpenAI 生成→`tts` バケット保存→URL 返却） | ローカルで通過。認証コンテキストから `/api/tts` が 200（生成 約2.6秒）、同文の2回目は `cached:true` で 68ms、返る public URL の音声も HEAD 200。iOS Safari の `<audio>` 実機解錠は未確認 |
-| 実機のモバイル（iOS / Android）での動作 | 未実施 |
+| 実機のモバイル（iOS / Android）での動作（特に iOS Safari の `<audio>` 実機解錠） | 未実施。ヘッドレス環境では実機の音声解錠を再現できない |
 
 ### テスト
 
