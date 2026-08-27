@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>repro-talk ｜ 卒業制作 発表（6分）</title>
+<style>
+:root{
+  --ink:#0a0a0a; --ink-2:#131316; --ink-3:#1b1b20;
+  --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.18);
+  --fg:#f4f2ee; --fg-dim:#a5a099; --fg-faint:#6f6a62;
+  --amber:#f59e0b; --amber-soft:#f7b955; --amber-ghost:rgba(245,158,11,.13);
+  --steel:#6aa0ff; --steel-ghost:rgba(106,160,255,.12);
+  --paper:#fbfaf7; --paper-ink:#1a1712; --paper-dim:#6b6559;
+  --m-stress:#e5484d; --m-rise:#f97316; --m-link:#2f6bea; --m-flap:#16a34a;
+  --gothic:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",sans-serif;
+  --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+body{font-family:var(--gothic);color:var(--fg);-webkit-font-smoothing:antialiased;font-feature-settings:"palt" 1}
+
+/* ---- ステージ（1280x720 を等比スケール） ---- */
+#stage{position:fixed;inset:0;display:grid;place-items:center}
+#deck{width:1280px;height:720px;position:relative;transform-origin:center center}
+.slide{
+  position:absolute;inset:0;padding:64px 76px;
+  background:var(--ink);
+  background-image:
+    radial-gradient(120% 80% at 50% -10%, rgba(245,158,11,.10), transparent 60%),
+    radial-gradient(80% 60% at 100% 100%, rgba(106,160,255,.06), transparent 55%);
+  display:none;flex-direction:column;
+}
+.slide.on{display:flex}
+.notes{display:none}
+
+/* ---- 共通パーツ ---- */
+.kicker{font-size:17px;letter-spacing:.16em;color:var(--amber);font-weight:700;margin-bottom:14px}
+h1{font-size:62px;line-height:1.22;margin:0;letter-spacing:.01em}
+h2{font-size:44px;line-height:1.3;margin:0 0 26px;letter-spacing:.01em}
+.lead{font-size:27px;line-height:1.75;color:var(--fg);margin:0}
+.dim{color:var(--fg-dim)}
+.faint{color:var(--fg-faint)}
+.am{color:var(--amber)}
+.hl{background:var(--amber-ghost);box-shadow:0 0 0 6px var(--amber-ghost);border-radius:3px}
+.num{font-family:var(--mono);font-weight:700;font-variant-numeric:tabular-nums}
+b,strong{font-weight:700}
+ul{margin:0;padding:0;list-style:none}
+li{font-size:26px;line-height:1.85;margin-bottom:12px;padding-left:30px;position:relative}
+li::before{content:"";position:absolute;left:6px;top:.78em;width:9px;height:9px;border-radius:50%;background:var(--fg-faint)}
+li.k::before{background:var(--amber);box-shadow:0 0 0 5px var(--amber-ghost)}
+.spacer{flex:1}
+.foot{font-size:16px;color:var(--fg-faint);letter-spacing:.04em}
+
+.card{background:var(--ink-2);border:1px solid var(--line);border-radius:16px;padding:26px 28px}
+.card h3{margin:0 0 10px;font-size:24px;letter-spacing:.01em}
+.card p{margin:0;font-size:19px;line-height:1.72;color:var(--fg-dim)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px;align-items:center}
+
+.shot{width:100%;border-radius:12px;border:1px solid var(--line-2);display:block;background:#fff}
+.shotwrap{border-radius:12px;overflow:hidden;background:var(--ink-3);border:1px solid var(--line);height:206px}
+.grid3 .shotwrap{height:300px}
+.shotwrap img{width:100%;height:100%;object-fit:cover;object-position:top left;display:block}
+
+/* ---- 紙（5枚目） ---- */
+.paper{background:var(--paper);color:var(--paper-ink);border-radius:10px;padding:26px 30px;
+  background-image:repeating-linear-gradient(180deg,transparent 0 43px,#e7e2d6 43px 44px);
+  box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.paper .en{font-size:27px;line-height:44px;letter-spacing:.01em;font-weight:600}
+.pens{display:flex;gap:9px;margin-top:16px}
+.pen{width:34px;height:8px;border-radius:99px}
+
+/* ---- 数値タイル（12枚目） ---- */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.stat{background:var(--ink-2);border:1px solid var(--line);border-radius:14px;padding:28px 26px}
+.stat .lb{font-size:17px;color:var(--fg-dim);margin-bottom:10px}
+.stat .vl{font-size:50px;font-weight:700;line-height:1.15}
+.stat .vl .u{font-size:22px;font-weight:600;color:var(--fg-dim);margin-left:5px}
+.stat.key{border-color:rgba(245,158,11,.5);background:linear-gradient(180deg,var(--amber-ghost),var(--ink-2))}
+
+/* ---- HUD ---- */
+#hud{position:fixed;right:14px;bottom:12px;display:flex;gap:14px;align-items:center;
+  font-family:var(--mono);font-size:13px;color:var(--fg-faint);z-index:9}
+#hud .warn{color:var(--amber)}
+#hud .over{color:#e5484d}
+#bar{position:fixed;left:0;top:0;height:3px;background:var(--amber);z-index:9;transition:width .25s}
+#notes{position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow:auto;
+  background:rgba(8,8,10,.97);border-top:1px solid var(--line-2);padding:20px 26px;z-index:10;display:none}
+#notes.on{display:block}
+#notes h4{margin:0 0 10px;font-size:14px;letter-spacing:.16em;color:var(--amber)}
+#notes .body{font-size:16px;line-height:1.85;color:var(--fg-dim);white-space:pre-wrap}
+#help{position:fixed;left:14px;bottom:12px;font-family:var(--mono);font-size:12px;color:#4a463f;z-index:9}
+
+@media print{
+  html,body{overflow:visible;background:#fff}
+  #stage{position:static;display:block}
+  #deck{transform:none!important;width:1280px;height:720px}
+  .slide{display:flex!important;position:relative;page-break-after:always;break-after:page}
+  #hud,#help,#notes,#bar{display:none!important}
+  @page{size:1280px 720px;margin:0}
+}
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div id="stage"><div id="deck">
+
+<!-- 1 -->
+<section class="slide" data-t="10">
+  <div class="spacer"></div>
+  <div class="kicker">卒業制作『自分の武器を作る』</div>
+  <h1>repro-talk</h1>
+  <p class="lead" style="margin-top:22px;font-size:30px">
+    英語学習を<span class="am">「始められる」</span>ようにして、<br>
+    <span class="am">「続けられる」</span>ようにする、自分専用アプリ
+  </p>
+  <div class="spacer"></div>
+  <div class="foot">AI-Driven School 第1期 金曜クラス ／ 安尾</div>
+  <div class="notes">今日話したいのは、英語の話ではありません。
+「やると決めたのに、始められない」を、どう潰したかの話です。</div>
+</section>
+
+<!-- 2 -->
+<section class="slide" data-t="25">
+  <div class="kicker">まず、前提から</div>
+  <h2>安尾 ／ エンジニアリングマネージャー</h2>
+  <ul>
+    <li><b>社内向けのシステム・基盤</b>を作るチームのマネジメント</li>
+    <li class="k">普段、業務で<b>自分でコードを書くことは、ほぼありません</b></li>
+    <li class="k">仕事道具は <b>PCとスマホだけ</b>。紙のノートもペンも使いません</li>
+  </ul>
+  <div class="spacer"></div>
+  <p class="lead faint" style="font-size:22px">— この2つは、あとで効いてきます</p>
+  <div class="notes">安尾です。社内で使うシステムや基盤を作るチームのマネージャーをしています。
+普段、自分で手を動かしてコードを書くことはほとんどありません。
+仕事道具はPCとスマホだけで、紙のノートもペンも使いません。
+——この2つは、あとで効いてきます。
+
+【この枚の役割】伏線を2本張るだけ。経歴は語らない。
+ A「コードを書かない」→ 8・13枚目で回収
+ B「紙もペンも無い」→ 5枚目で回収</div>
+</section>
+
+<!-- 3 -->
+<section class="slide" data-t="40">
+  <div class="kicker">何に困っていたか</div>
+  <h2>読み書きは、翻訳ツールで足りる。<br><span class="am">会話は、翻訳を挟めない。</span></h2>
+  <ul>
+    <li>海外チームとの<b>定例ミーティング</b>、Slack・ドキュメントでのやりとりがある</li>
+    <li>読み書きは困らない。<b>翻訳ツールを使えば足りる</b></li>
+    <li class="k">会話は<b>リアルタイム</b>。翻訳を挟む時間がない</li>
+  </ul>
+  <div style="margin-top:18px;padding:20px 24px;border-left:3px solid var(--amber);background:var(--amber-ghost);border-radius:0 12px 12px 0">
+    <p class="lead" style="font-size:24px">言いたいことが言えない。言っても伝わらない。言われたことが理解できない。<br>
+    <b class="hl">聞き返しても、やっぱり理解できない。</b></p>
+  </div>
+  <div class="spacer"></div>
+  <p class="lead" style="font-size:24px">本当は<b>海外メンバーと1on1をしたい</b>。言語を理由に、できていない。</p>
+  <div class="notes">読み書きは困っていません。翻訳ツールを使えば足りるので。
+問題は会話です。会話はリアルタイムなので、翻訳ツールを挟む時間がない。
+言いたいことが言えない。言っても伝わらない。言われたことが理解できない。
+聞き返しても、やっぱり理解できない。
+
+極めつけは、海外メンバーと1on1が組めていないこと。
+マネージャーとして本来やるべきことが、言語を理由にできていない。
+自分がやりたいのは海外メンバーを含むチームを率いることなので、避けて通れませんでした。
+
+【落とすな】「翻訳ツールで足りる／会話には挟めない」
+ → 聞き手は必ず「英語こそAIが解決するのでは」と思う。その先回りの答え。</div>
+</section>
+
+<!-- 4 -->
+<section class="slide" data-t="40">
+  <div class="kicker">これまでと、出会った学習法</div>
+  <h2>やって、伸びてもいた。<br>それでも<span class="am">仕事の会話は変わらなかった。</span></h2>
+  <div class="grid2" style="gap:34px">
+    <div>
+      <ul style="font-size:23px">
+        <li style="font-size:23px">オンライン英会話 / 単語アプリ / 洋画のシャドーイング → <b>続かなかった</b></li>
+        <li class="k" style="font-size:23px">英語コーチングでは<b>伸びた（<span class="num">A2</span> → <span class="num">B1</span>）</b></li>
+        <li style="font-size:23px">ただし<b>題材が業務ではなかった</b>ので、仕事の会話には届かなかった</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(245,158,11,.4)">
+      <h3 class="am">そのあとに見つけた学習法</h3>
+      <p style="color:var(--fg);font-size:20px;margin-top:14px">
+        <b class="num">①</b> 完成された英語を「<b class="am">100</b>」のまま受け取る<br>
+        <span class="faint" style="font-size:17px">1文再生 → 止める → 同じように言う</span>
+      </p>
+      <p style="color:var(--fg);font-size:20px;margin-top:16px">
+        <b class="num">②</b> 「<b>0</b>」から自分で作り出す<br>
+        <span class="faint" style="font-size:17px">お題に沿って独り言</span>
+      </p>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <p class="lead" style="font-size:23px">必要なのは、この<b>2つだけ</b>。これをやれば伸びる、と素直に思えた。</p>
+  <div class="notes">勉強していなかったわけではありません。やって、伸びてもいます。
+それでも、仕事の会話は変わりませんでした。題材が仕事ではなかったからです。
+
+そのあとに見つけたのが、この学習法。必要なのは2つだけ。
+完成された英語を100のまま受け取る。0から自分で作り出す。
+これまで試したどの教材より説得力があった。これをやれば伸びる、と素直に思えました。
+
+【注意】コーチングを失敗として話さない。A2→B1 は事実として伸びている。
+ 言うのは「効かなかった」ではなく「業務の題材ではなかったので届かなかった」。</div>
+</section>
+
+<!-- 5 -->
+<section class="slide" data-t="40">
+  <div class="kicker">③ 作りたいと思った理由</div>
+  <h2>「続かない」ではなく、<span class="am">「始められない」</span>だった</h2>
+  <div class="grid2" style="gap:38px">
+    <div>
+      <div class="paper">
+        <div class="en">She's <span style="color:var(--m-stress)">go</span>ing to drink a<br>glass of <span style="color:var(--m-flap)">wa</span>ter <span style="color:var(--m-link)">in‿the</span> mountains.</div>
+        <div class="pens">
+          <span class="pen" style="background:#e5484d"></span><span class="pen" style="background:#f97316"></span>
+          <span class="pen" style="background:#9a9691"></span><span class="pen" style="background:#2f6bea"></span>
+          <span class="pen" style="background:#16a34a"></span><span class="pen" style="background:#8b5cf6"></span>
+          <span class="pen" style="background:#0ea5b7"></span>
+        </div>
+      </div>
+      <p class="foot" style="margin-top:14px">教わったやり方 ＝ 紙に行間を空け、<b style="color:var(--fg-dim)">カラーペン7色</b>で音の記号を書き込む</p>
+    </div>
+    <div>
+      <p class="lead" style="font-size:25px;margin-bottom:20px">紙の習慣もカラーペンも、<b>持っていなかった</b>。</p>
+      <ul style="font-size:21px">
+        <li style="font-size:21px">自分に合った動画を探す</li>
+        <li style="font-size:21px">練習する区間を選ぶ</li>
+        <li style="font-size:21px">同じ30秒を何度も再生する</li>
+        <li style="font-size:21px">自分の声を録る</li>
+        <li style="font-size:21px">覚えたフレーズを書き留める</li>
+        <li style="font-size:21px">分からない音をChatGPTにコピペする</li>
+      </ul>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <p class="lead" style="font-size:26px">意志の弱さだと思っていた。正体は<b class="hl">この小さな面倒の積み重ね</b>だった。</p>
+  <div class="notes">これをやれば伸びる、と思えたのに、始めることすらできませんでした。
+
+教わったやり方は、紙に行間を空けて、カラーペン7色で音の記号を書き込む。
+さっき言ったとおり、自分には紙の習慣もカラーペンもありません。
+その最初の一歩が面倒すぎて、踏み出せなかった。
+
+面倒はそこだけではありませんでした。動画を探す、区間を選ぶ、何度も再生する、
+声を録る、フレーズを書き留める。手が止まる場所が、無数にあった。
+
+続かないのは意志の弱さだと思っていましたが、正体はこの小さな面倒の積み重ねでした。
+だから、意志で乗り越えるのをやめて、面倒のほうを消すことにしました。
+
+【山場】ここは絶対に削らない・急がない。</div>
+</section>
+
+<!-- 6 -->
+<section class="slide" data-t="10">
+  <div class="spacer"></div>
+  <div class="kicker">① 作ったもの</div>
+  <h1 style="font-size:70px">repro-talk</h1>
+  <p class="lead" style="margin-top:20px;font-size:27px">
+    紙も、カラーペンも、ChatGPTへの往復も、<br><b class="am">1つのアプリに畳み込んだ</b>。
+  </p>
+  <div class="spacer"></div>
+  <div class="foot">Next.js 16 ／ Supabase ／ Claude API　—　repro-talk.vercel.app</div>
+  <div class="notes">作ったのが、これです。（10秒の間。説明は次の枚に持たせる）</div>
+</section>
+
+<!-- 7 -->
+<section class="slide" data-t="35">
+  <div class="kicker">受け取る・繋ぐ・作り出す</div>
+  <h2>3本の柱と、<span class="am">自分で足した1本</span></h2>
+  <div class="grid3">
+    <div class="card"><h3><span class="num am">100</span> リプロダクション</h3>
+      <p>1文再生して止め、同じように言う。区間ループ、0.5倍速で「音を顕微鏡で見る」。</p></div>
+    <div class="card" style="border-color:rgba(245,158,11,.45)"><h3><span class="am">↔</span> フレーズ</h3>
+      <p>覚えた型を独り言へ受け渡す。初回使用で卒業。<b style="color:var(--fg)">ここで 0 と 100 が繋がる。</b></p></div>
+    <div class="card"><h3><span class="num">0</span> 独り言</h3>
+      <p>お題に沿って「1人電話」。歩きながらスマホ片手。音声は残さず時間だけ記録。</p></div>
+  </div>
+  <div class="card" style="margin-top:22px;border-color:rgba(106,160,255,.4);background:linear-gradient(90deg,var(--steel-ghost),var(--ink-2))">
+    <h3 style="color:var(--steel)">＋ 瞬間英作文 — 教わった方法論には無い、自分で足した1本</h3>
+    <p style="font-size:19px">毎日使ううちに「<b style="color:var(--fg)">100を受け取っても、0からは出てこない</b>」という穴が見えた。日本語で考えて詰まるなら、そこだけ別に鍛えればいい。</p>
+  </div>
+  <div class="notes">柱は3本。受け取る、繋ぐ、作り出す。
+真ん中の「繋ぐ」が肝です。覚えた表現が使われずに眠るのを防ぐ。
+
+そして4本目。これは教わった方法論には無くて、毎日使ううちに
+「100を受け取っても、0からは出てこない」と分かったので、自分で足しました。</div>
+</section>
+
+<!-- 8 -->
+<section class="slide" data-t="45">
+  <div class="kicker">実際に動いているもの</div>
+  <h2>デモ — <span class="am">仕事で言えなかった一言</span>を、素材にする</h2>
+  <div class="grid2" style="gap:30px;align-items:start">
+    <div class="shotwrap" style="height:330px"><img src="shots/clip.png" alt="リプロダクション・ワークスペース"></div>
+    <ul style="font-size:22px">
+      <li class="k" style="font-size:22px"><b>1回再生して、止まる</b><br><span class="faint" style="font-size:18px">区間を一度決めれば、あとはボタンひとつ</span></li>
+      <li class="k" style="font-size:22px"><b>ドラッグして、音の記号を付ける</b><br><span class="faint" style="font-size:18px">紙とカラーペンの代わりが、これ</span></li>
+      <li class="k" style="font-size:22px"><b>選択して、AIに聞く</b><br><span class="faint" style="font-size:18px">ChatGPTへのコピペの代わりが、これ</span></li>
+    </ul>
+  </div>
+  <div class="spacer"></div>
+  <p class="lead" style="font-size:24px">5枚目で挙げた面倒が、<b>この1画面で消えています</b>。</p>
+  <div class="notes">★ここで実機に切り替える（音を出す）
+
+見せるのは 1画面だけ。あちこち回らない。
+ 1. 登録した区間を「1回再生して止める」→ 自動で止まる
+ 2. スクリプトをドラッグ → 発音記号を付ける（紙とカラーペンの代替）
+ 3. 分からない表現を選択 → AIが意味と例文を返す（ChatGPTの代替）
+
+【事前チェック】ログイン済み・音量・ネットワーク・通知OFF
+【転んだら】この画面の静止画のまま口頭で押し切る（切り替えに時間を使わない）</div>
+</section>
+
+<!-- 9 -->
+<section class="slide" data-t="30">
+  <div class="kicker">② 解決する面倒</div>
+  <h2>止まる場所を、<span class="am">ひとつずつ消した</span></h2>
+  <div class="grid3">
+    <div>
+      <div class="shotwrap"><img src="shots/pain1-marking.png" alt="マーキングエディタ"></div>
+      <p class="lead" style="font-size:20px;margin-top:14px"><b>紙とカラーペン</b><br><span class="faint">→ 画面上のドラッグ</span></p>
+    </div>
+    <div>
+      <div class="shotwrap"><img src="shots/pain2-explain.png" alt="AIによる解説"></div>
+      <p class="lead" style="font-size:20px;margin-top:14px"><b>ChatGPTへの手動コピペ</b><br><span class="faint">→ アプリ内で完結</span></p>
+    </div>
+    <div>
+      <div class="shotwrap"><img src="shots/pain7-text-player.png" alt="自作テキストのクリップ"></div>
+      <p class="lead" style="font-size:20px;margin-top:14px"><b>練習したい英文が動画に無い</b><br><span class="faint">→ 自分で書いた英文を貼る</span></p>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <p class="lead" style="font-size:23px">他にもあります。<span class="faint">全部、図解に書きました。</span></p>
+  <div class="notes">3つだけ話す。残りは「図解に全部あります」で送る。
+
+3つ目が効く：仕事で言えなかった一言ほど、YouTubeを探しても出てこない。
+コーチングで伸びても仕事の会話が変わらなかったのは、題材が仕事じゃなかったから。
+だから、言えなかった一言をそのまま素材にできるようにしました。</div>
+</section>
+
+<!-- 10 -->
+<section class="slide" data-t="25">
+  <div class="kicker">④ 工夫</div>
+  <h2>減らすだけでなく、<span class="am">「続く」を可視化した</span></h2>
+  <ul>
+    <li><b>手が止まる場所を、そのまま機能にした</b><br><span class="faint" style="font-size:20px">探す／選ぶ／繰り返す／録る／残す を、1操作に翻訳した</span></li>
+    <li><b>AIをアプリに畳み込み、行き来をゼロにした</b><br><span class="faint" style="font-size:20px">LLMは数値位置が不安定なので、<span class="num">quote＋出現回数</span>で復元している</span></li>
+    <li class="k"><b>連続日数・ヒートマップ・回数・時間を、常に目に入る場所に出した</b><br><span class="faint" style="font-size:20px">積み上がった記録が見えると、途切れさせたくなくなる</span></li>
+  </ul>
+  <div class="spacer"></div>
+  <p class="lead" style="font-size:24px">面倒を消して<b>始められる</b>ようになり、可視化して<b class="hl">続けられる</b>ようになった。</p>
+  <div class="notes">面倒を消しただけでは続きません。
+
+これが効きました。積み上がった記録が見えると、途切れさせたくなくなる。
+続けるためのモチベーションが自分の中に湧いて、
+気合いを入れなくても、自然と毎日開くようになりました。</div>
+</section>
+
+<!-- 11 -->
+<section class="slide" data-t="20">
+  <div class="kicker">④ 苦戦</div>
+  <h2>「動くはず」が動かない罠を、<span class="am">ひとつずつ踏んだ</span></h2>
+  <div class="card" style="border-color:rgba(106,160,255,.4)">
+    <h3 style="color:var(--steel)">読み上げが無音で固着 → クラウドTTSへ全面移行 → 本番だけ保存が3段の罠</h3>
+    <p style="font-size:20px;margin-top:12px">
+      ブラウザ標準の読み上げが、使ううちに無音で固まる。延命では回復しきれないと判断して作り直した。<br>
+      すると本番だけ保存が通らない。<b style="color:var(--fg)">データが壊れる → 権限が効かない → 認証キーの形式が違う</b>。3段を1つずつ剥がした。
+    </p>
+  </div>
+  <ul style="margin-top:20px;font-size:21px">
+    <li style="font-size:21px">iOS Safari は <span class="num">audio/mp4</span>。決め打ちすると無音になる</li>
+    <li style="font-size:21px">YouTube の区間ループは素直に作れない。終端を監視して戻す</li>
+  </ul>
+  <div class="spacer"></div>
+  <p class="lead faint" style="font-size:22px">— 一番時間を使ったのは、<b style="color:var(--fg-dim)">作り直す判断</b>と、<b style="color:var(--fg-dim)">本番でしか出ない問題の切り分け</b></p>
+  <div class="notes">深追いしない。「環境が現実を返してくる」という一段上の話にまとめる。
+時間が押していたら、この枚は1文で流してよい。</div>
+</section>
+
+<!-- 12 -->
+<section class="slide" data-t="15">
+  <div class="kicker">使ってみて、どうなったか</div>
+  <h2><span class="num">11</span>日、途切れていません</h2>
+  <div class="stats">
+    <div class="stat"><div class="lb">連続日数</div><div class="vl"><span class="num">11</span><span class="u">日</span></div></div>
+    <div class="stat"><div class="lb">今週の独り言</div><div class="vl"><span class="num">5</span><span class="u">分</span><span class="num">59</span><span class="u">秒</span></div></div>
+    <div class="stat"><div class="lb">今週のリプロダクション</div><div class="vl"><span class="num">33</span><span class="u">回</span></div></div>
+    <div class="stat key"><div class="lb am">今週の瞬間英作文</div><div class="vl"><span class="num">137</span><span class="u">回</span></div></div>
+  </div>
+  <div class="spacer"></div>
+  <p class="lead" style="font-size:25px">一番使っているのは、<b class="hl">あとから自分で足した瞬間英作文</b>だった。<br>
+  <span class="dim" style="font-size:22px">逆に、独り言はまだ習慣になっていない。次に面倒を消しにいくのは、そこ。</span></p>
+  <div class="notes">11日、途切れていません。
+一番使っているのは、作ってから足した瞬間英作文でした。使ってみないと分からなかった。
+逆に、独り言だけはまだ習慣になっていません。
+次に面倒を消しにいくのはそこだと、もう分かっています。
+
+【盛らない】
+ ・「累計」と言わない（11日以外は今週の値）
+ ・「ずっと続けています」と言わない（ヒートマップは直近3週ほど）
+ ・英語力が伸びたとは、まだ言わない。測っていないなら「まだ測っていない」と言い切る。</div>
+</section>
+
+<!-- 13 -->
+<section class="slide" data-t="15">
+  <div class="spacer"></div>
+  <div class="kicker">持ち帰ってほしいこと</div>
+  <h1 style="font-size:58px">自分の武器は、<span class="am">自分で作れる。</span></h1>
+  <p class="lead" style="margin-top:24px;font-size:25px">
+    動画を探す・区間を戻す・紙とペンで記号を書く・ChatGPTへコピペする——<br>
+    いくつもの道具を行き来していた学習が、<b>自分で作った1つのアプリ</b>に収まった。
+  </p>
+  <p class="lead" style="margin-top:18px;font-size:25px">
+    続かないことがあるなら、意志の問題ではなく<b class="hl">面倒の問題</b>かもしれない。
+  </p>
+  <div class="spacer"></div>
+  <div class="foot">本番 repro-talk.vercel.app　／　図解 repro-talk.surge.sh</div>
+  <div class="notes">AI-Driven Rules の「自分の武器を自分で作れ」「1クリックを減らせ」。
+そこから1クリックずつ削って磨くほど、迷いも中断も消えていきました。
+
+普段コードを書かない自分でも、作り切れた。それが一番の学びです。</div>
+</section>
+
+</div></div>
+
+<div id="hud"><span id="clock">6:00</span><span id="budget"></span><span id="page"></span></div>
+<div id="help">← → : 移動　F : 全画面　S : ノート　T : タイマー　R : リセット</div>
+<div id="notes"><h4>SPEAKER NOTES</h4><div class="body"></div></div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=0, notesOn=false, running=false, left=360, timer=null;
+  var deck=document.getElementById('deck'), bar=document.getElementById('bar');
+  var clock=document.getElementById('clock'), pageEl=document.getElementById('page');
+  var budgetEl=document.getElementById('budget'), notesEl=document.getElementById('notes');
+  var notesBody=notesEl.querySelector('.body');
+
+  // 各スライドの想定終了時刻（累積）を出しておく
+  var cum=[], acc=0;
+  slides.forEach(function(s){ acc+=parseInt(s.dataset.t,10)||0; cum.push(acc); });
+  var planned=acc;
+
+  function fit(){
+    var s=Math.min(window.innerWidth/1280, window.innerHeight/720);
+    deck.style.transform='scale('+s+')';
+  }
+  function fmt(n){ var m=Math.floor(Math.abs(n)/60), sec=Math.abs(n)%60;
+    return (n<0?'-':'')+m+':'+(sec<10?'0':'')+sec; }
+
+  function render(){
+    slides.forEach(function(s,n){ s.classList.toggle('on', n===i); });
+    pageEl.textContent=(i+1)+'/'+slides.length;
+    bar.style.width=((i+1)/slides.length*100)+'%';
+    notesBody.textContent=(slides[i].querySelector('.notes')||{textContent:''}).textContent.trim();
+    updateBudget();
+  }
+  function updateBudget(){
+    var spent=planned-left;                 // 経過（想定尺基準）
+    var should=cum[i];                      // この枚を出し終える想定時刻
+    var d=spent-should;
+    budgetEl.textContent='この枚 '+slides[i].dataset.t+'s／'+(d>0?'+':'')+d+'s';
+    budgetEl.className = d>15 ? 'over' : (d>5 ? 'warn' : '');
+  }
+  function tick(){
+    left--; clock.textContent=fmt(left);
+    clock.className = left<0 ? 'over' : (left<60 ? 'warn' : '');
+    updateBudget();
+  }
+  function go(n){ if(n<0||n>=slides.length) return; i=n; render(); }
+
+  document.addEventListener('keydown', function(e){
+    var k=e.key;
+    if(k==='ArrowRight'||k==='ArrowDown'||k===' '||k==='PageDown'){ e.preventDefault(); go(i+1); }
+    else if(k==='ArrowLeft'||k==='ArrowUp'||k==='PageUp'){ e.preventDefault(); go(i-1); }
+    else if(k==='Home'){ go(0); } else if(k==='End'){ go(slides.length-1); }
+    else if(k==='f'||k==='F'){ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }
+    else if(k==='s'||k==='S'){ notesOn=!notesOn; notesEl.classList.toggle('on',notesOn); }
+    else if(k==='t'||k==='T'){ running=!running;
+      if(running){ timer=setInterval(tick,1000); } else { clearInterval(timer); } }
+    else if(k==='r'||k==='R'){ clearInterval(timer); running=false; left=360; clock.textContent=fmt(left);
+      clock.className=''; updateBudget(); }
+    else if(k>='1'&&k<='9'){ go(parseInt(k,10)-1); }
+  });
+  document.addEventListener('click', function(e){ if(e.clientY < window.innerHeight-120) go(i+1); });
+  window.addEventListener('resize', fit);
+  fit(); render();
+})();
+</script>
+</body>
+</html>
