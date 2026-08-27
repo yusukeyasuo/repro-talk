@@ -178,6 +178,14 @@
   .pillar p{margin:.2rem 0 0;font-size:.9rem;color:var(--fg-dim)}
   .pillar .zero{font-family:var(--mono);font-size:.72rem;color:var(--fg-faint);margin-top:.7rem;letter-spacing:.05em}
   .arrow{display:flex;align-items:center;color:var(--fg-faint);font-size:1.3rem}
+  /* 方法論には無く、自分で足した1本 */
+  .addon{display:flex;gap:16px;align-items:flex-start;margin-top:14px;background:var(--ink-2);
+    border:1px solid var(--line);border-left:2px solid var(--amber);border-radius:14px;padding:18px}
+  @media(max-width:820px){.addon{flex-direction:column;gap:9px}}
+  .addon-tag{flex:0 0 auto;font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;color:var(--amber-soft);
+    border:1px solid rgba(245,158,11,.35);background:var(--amber-ghost);border-radius:999px;padding:.35em .85em;white-space:nowrap}
+  .addon h3{font-size:1.04rem;margin:0 0 .35rem}
+  .addon p{margin:0;font-size:.9rem;color:var(--fg-dim)}
 
   /* 画面マップ・技術 */
   .subhead{font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--fg-faint);margin:40px 0 14px}
@@ -338,7 +346,7 @@
     <div class="pillars reveal">
       <div class="pillar recv">
         <h3><span class="n">100</span>リプロダクション</h3>
-        <p>ネイティブ音声を1文再生して<b style="color:var(--amber-soft)">止め</b>、同じように言う。区間A-Bループ、0.5倍速で「音を顕微鏡で見る」。</p>
+        <p>ネイティブ音声を1文再生して<b style="color:var(--amber-soft)">止め</b>、同じように言う。区間A-Bループ、0.5倍速で「音を顕微鏡で見る」。素材は<b style="color:var(--fg)">YouTubeでも、自分で書いた英文でも</b>いい。</p>
         <p class="zero">100 を、100 のまま受け取る</p>
       </div>
       <div class="arrow">→</div>
@@ -355,7 +363,15 @@
       </div>
     </div>
 
-    <p class="subhead reveal">6つの画面 — 実際に動いているもの</p>
+    <div class="addon reveal">
+      <span class="addon-tag">＋ 自分で足した1本</span>
+      <div>
+        <h3>瞬間英作文 — 日本語を見た瞬間に、英語を作る</h3>
+        <p>毎日使ううちに、穴が見えた。<b style="color:var(--fg)">100 を受け取っても、0 からは出てこない</b>。日本語で考えて詰まるなら、そこだけ別に鍛えればいい——動画の方法論には無いが、自分で1本足した。日本語が出る → 考える時間 → 答えを表示して読み上げ → 声に出して再現 → 次へ。<b style="color:var(--fg)">★を付けた文だけ</b>を流せるので、言えるものは飛ばせる。</p>
+      </div>
+    </div>
+
+    <p class="subhead reveal">7つの画面 — 実際に動いているもの</p>
 
     <figure class="shot feature reveal">
       <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span class="u">repro-talk.vercel.app/clips/…</span></div>
@@ -379,6 +395,10 @@
       <figure class="shot">
         <img src="shots/monologue.png" width="1280" height="860" loading="lazy" alt="独り言モード。今日のお題・1人電話ボタン・今日使うフレーズ">
         <figcaption><span class="rt">/monologue</span><span class="ds">独り言モード。1人電話・今日使うフレーズ</span></figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="shots/compositions.png" width="1280" height="860" loading="lazy" alt="瞬間英作文のコース詳細。対象（全部／★のみ）・順番・切り替え速度を選んで流す。例文一覧には★と読み上げボタン">
+        <figcaption><span class="rt">/compositions</span><span class="ds">瞬間英作文。★のみで流す・CSVで一括登録</span></figcaption>
       </figure>
       <figure class="shot">
         <img src="shots/phrases.png" width="1280" height="860" loading="lazy" alt="フレーズ・ストック。在庫と身についたの2区分">
@@ -442,6 +462,22 @@
         </div>
         <figure class="pain-shot"><img src="shots/pain5-player.png" width="416" height="722" loading="lazy" alt="区間A-Bループと「1回再生して止める」。音源に触れず、YouTubeプレイヤー上で区間だけを扱う"></figure>
       </div>
+      <div class="pain-row">
+        <div class="pain-top">
+          <div class="before"><span class="t">面倒</span>独り言が止まる。日本語で考えてから英語に組み立てている——かといって英作文帳は、答えを手で隠してめくる作業になる</div>
+          <div class="to">→</div>
+          <div class="after"><span class="t">repro-talk</span>コースを選んで<b>流すだけ</b>。日本語 → 考える時間 → 答えを読み上げ → 次へ。まだ言えない文に<b>★</b>を付け、次からはそれだけ流す</div>
+        </div>
+        <figure class="pain-shot"><img src="shots/pain6-composition.png" width="1280" height="560" loading="lazy" alt="瞬間英作文のドリル画面。日本語が1文だけ大きく出て、考える時間のゲージが減っていく"></figure>
+      </div>
+      <div class="pain-row">
+        <div class="pain-top">
+          <div class="before"><span class="t">面倒</span>練習したい英文が動画にない。仕事で言えなかった一言ほど、YouTubeを探しても出てこない</div>
+          <div class="to">→</div>
+          <div class="after"><span class="t">repro-talk</span>自分で書いた英文を貼ればクリップになる。<b>AIの声が1文ずつ読んで止まる</b>ので、同じ画面でマーキングも録音も聴き比べもそのまま</div>
+        </div>
+        <figure class="pain-shot"><img src="shots/pain7-text-player.png" width="416" height="702" loading="lazy" alt="自作テキストのクリップ。文単位プレイヤーで「1文再生して止める」、0.5倍速と録音も同じ並び"></figure>
+      </div>
     </div>
   </div>
 </section>
@@ -480,6 +516,7 @@
           <li><span class="h">手が止まる場所を、そのまま機能にした</span><span class="d">動画を探す・区間を選ぶ・繰り返し再生する・声を録る・フレーズを残す——③で数えた「止まる場所」を一つずつ操作に翻訳。URLを貼る／A-Bで切り出す／<code>1回再生して止める</code>／ワンタップ録音。紙もカラーペンも要らない。</span></li>
           <li><span class="h">AIをアプリに畳み込み、行き来をなくした</span><span class="d">音の解析・分からない箇所の解説・独り言の英語化・使えるフレーズの抽出——ChatGPTへコピペしていた作業を、他ツールへ移らず<b style="color:var(--fg)">アプリ内で完結</b>。LLMが不安定な数値位置を返さないよう <code>quote＋出現回数</code> で復元するなど、精度も作り込んだ。</span></li>
           <li><span class="h">減らすだけでなく、「続く」を可視化した</span><span class="d">面倒を消すだけでは続かない。<b style="color:var(--fg)">連続日数・12週ヒートマップ・再現回数・独り言の合計時間</b>を常に見せ、やった事実を積み上げる。測るのは「聴いた回数」ではなく <code>言えた回数</code>。独り言は音声を残さず時間だけを刻む——可視化のための記録だから。</span></li>
+          <li><span class="h">使ってみて空いた穴を、自分で足して埋めた</span><span class="d">毎日回すうちに「100 を受け取っても 0 から出てこない」と分かり、<b style="color:var(--fg)">瞬間英作文</b>を方法論の外から足した。<b style="color:var(--fg)">答えを飛ばす手段は持たせない</b>——日本語 → 口に出す → 直後に答え、の順を崩さないため。<code>★</code> は「まだ言えない」印で、言えたら外す。素材も動画に縛らず、<b style="color:var(--fg)">自作テキスト</b>をTTSで1文ずつ読ませて同じワークスペースに載せた。</span></li>
         </ul>
       </div>
 
@@ -492,6 +529,7 @@
           <li><span class="h">YouTube IFrame の <code>end</code> はループしない</span><span class="d">区間ループが素直に作れず、<code>requestAnimationFrame</code> で終端を監視して <code>seekTo</code> で戻す実装に。</span></li>
           <li><span class="h">選択がボタン押下で消える</span><span class="d">記号を付ける前に選択範囲が解除される。ツールバーは <code>onMouseDown</code> で <code>preventDefault()</code>。</span></li>
           <li><span class="h">読み上げの固着から、クラウドTTS移行と本番の落とし穴まで</span><span class="d">ブラウザ標準の <code>speechSynthesis</code> は使ううちに声はあるのに <code>start</code> が来ず無音で固着し、<b style="color:var(--fg)">リロードでは戻らずブラウザ再起動が必要</b>だった。延命策では回復しきれないと判断し、<b style="color:var(--fg)">サーバで音声を生成 → <code>&lt;audio&gt;</code> で再生 → キャッシュ</b>するクラウドTTSへ全面移行。すると今度は本番の保存が三段の罠に阻まれた——<code>upload()</code> に ArrayBuffer を渡すと壊れ、Storage の RLS は <code>to authenticated</code> が効かず <code>auth.uid()</code> 判定が要り、SSR サーバはユーザーの認証を Storage に載せられずサーバ専用の <b style="color:var(--fg)">service role キー</b>で保存する必要があった。最後は本番だけ <code>Invalid Compact JWS</code> で弾かれ、<b style="color:var(--fg)">新形式キーではなく <code>eyJ…</code> の legacy JWT</b> が要ると突き止めて解決した。</span></li>
+          <li><span class="h">一時停止と再開が、端末ごとに壊れる</span><span class="d"><code>pause()</code>／<code>resume()</code> は端末差が大きく当てにできない。読み上げ中に止めたら <code>cancel()</code> してその文を頭から読み直す設計に。考える時間はCSSアニメを凍結し、<code>performance.now()</code> の締切から残りを割り出して張り直す。</span></li>
         </ul>
       </div>
     </div>
