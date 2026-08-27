@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<script>document.documentElement.classList.add('js')</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>repro-talk ｜ 卒業制作 図解 — AI-Driven School</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20512%20512'%3E%3Crect%20width='512'%20height='512'%20rx='112'%20fill='%230a0a0a'/%3E%3Cpath%20d='M96%20200%20q40%20-72%2080%200%20t80%200%20t80%200%20t80%200'%20fill='none'%20stroke='%23f59e0b'%20stroke-width='24'%20stroke-linecap='round'/%3E%3Cpath%20d='M96%20312%20q40%2072%2080%200%20t80%200%20t80%200%20t80%200'%20fill='none'%20stroke='%23ffffff'%20stroke-width='24'%20stroke-linecap='round'/%3E%3C/svg%3E">
+<meta name="description" content="完成された英語を100のまま受け取り、0から独り言で作り出す。動画の学習法を1人で続けるための道具『repro-talk』の卒業制作図解。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@600;700;900&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* --- 地：黒い机（アイコン #0a0a0a 由来） --- */
+    --ink:#0a0a0a;
+    --ink-2:#131316;      /* 持ち上げた面 */
+    --ink-3:#1b1b20;      /* さらに上の面 */
+    --line:rgba(255,255,255,.10);
+    --line-2:rgba(255,255,255,.16);
+    --fg:#f4f2ee;          /* 机の上の文字 */
+    --fg-dim:#a5a099;      /* 暖色寄りグレー（琥珀へバイアス） */
+    --fg-faint:#6f6a62;
+    /* --- 主アクセント：琥珀＝「100で受け取る」 --- */
+    --amber:#f59e0b;
+    --amber-soft:#f7b955;
+    --amber-ghost:rgba(245,158,11,.13);
+    /* --- 白の波＝「0から生み出す」 --- */
+    --wave-recv:#f59e0b;
+    --wave-make:#f4f2ee;
+    /* --- 苦戦側の寒色（青=リンキング由来） --- */
+    --steel:#6aa0ff;
+    --steel-ghost:rgba(106,160,255,.12);
+    /* --- 紙：ノートの紙面 --- */
+    --paper:#fbfaf7;
+    --paper-2:#f2efe8;
+    --paper-line:#e7e2d6;
+    --paper-ink:#1a1712;
+    --paper-dim:#6b6559;
+    /* --- 発音記号 7色（アプリ実物と同じ） --- */
+    --m-stress:#e5484d;    /* 強勢 */
+    --m-rise:#f97316;      /* 上がる */
+    --m-drop:#9a9691;      /* 脱落 */
+    --m-link:#2f6bea;      /* リンキング */
+    --m-flap:#16a34a;      /* フラップT */
+    --m-reduction:#8b5cf6; /* 短縮 */
+    --m-swallow:#0ea5b7;   /* 飲み込み */
+
+    --maxw:1060px;
+    --r:16px;
+    --serif:"Newsreader",Georgia,"Times New Roman",serif;
+    --mincho:"Zen Old Mincho",serif;
+    --gothic:"Zen Kaku Gothic New",-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    --mono:"Geist Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    font-family:var(--gothic);
+    background:var(--ink);
+    color:var(--fg);
+    line-height:1.85;
+    letter-spacing:.01em;
+    font-feature-settings:"palt" 1;
+    -webkit-font-smoothing:antialiased;
+    /* 机の質感：ごく薄いビネットと粒状ノイズ相当のグラデ */
+    background-image:
+      radial-gradient(120% 80% at 50% -10%, rgba(245,158,11,.08), transparent 60%),
+      radial-gradient(80% 60% at 100% 100%, rgba(106,160,255,.05), transparent 55%);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+
+  a{color:var(--amber);text-decoration:none}
+  a:hover{text-decoration:underline;text-underline-offset:3px}
+  :focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:4px}
+
+  /* ---------- 見出し・ラベル ---------- */
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;
+    color:var(--amber);font-weight:500;
+  }
+  h1,h2,h3{font-family:var(--mincho);font-weight:700;text-wrap:balance;line-height:1.28;margin:0}
+  .sec-no{
+    font-family:var(--mono);font-weight:600;font-size:.8rem;letter-spacing:.15em;
+    color:var(--ink);background:var(--amber);
+    padding:.18em .7em;border-radius:100px;display:inline-block;vertical-align:.18em;
+  }
+  .sec-head{display:flex;align-items:baseline;gap:.9rem;flex-wrap:wrap;margin-bottom:.5rem}
+  .sec-head h2{font-size:clamp(1.5rem,3.4vw,2.15rem)}
+  .sec-sub{color:var(--fg-dim);font-size:1rem;max-width:60ch}
+  .band{padding:clamp(48px,7vw,92px) 0;position:relative}
+  .band + .band{border-top:1px solid var(--line)}
+
+  /* ---------- HERO ---------- */
+  .hero{padding:clamp(40px,6vw,72px) 0 clamp(30px,5vw,56px)}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(28px,4vw,56px);align-items:center}
+  @media(max-width:860px){.hero-grid{grid-template-columns:1fr;gap:32px}}
+  .hero h1{font-family:var(--mono);font-weight:600;font-size:clamp(2.6rem,7vw,4.4rem);letter-spacing:-.02em;color:var(--fg);margin:.5rem 0 .1rem}
+  .hero h1 .dot{color:var(--amber)}
+  .thesis{font-family:var(--mincho);font-weight:600;font-size:clamp(1.15rem,2.3vw,1.5rem);line-height:1.7;color:var(--fg);margin:.7rem 0 0;text-wrap:balance}
+  .thesis b{color:var(--amber);font-weight:700}
+  .thesis .mk{color:var(--fg)}
+  .lede{color:var(--fg-dim);margin:.9rem 0 0;max-width:46ch}
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:1.4rem}
+  .chip{
+    font-family:var(--mono);font-size:.74rem;letter-spacing:.03em;
+    color:var(--fg);background:var(--ink-2);border:1px solid var(--line-2);
+    padding:.4em .8em;border-radius:100px;white-space:nowrap
+  }
+  .chip .u{font-family:var(--gothic)}
+  .chip.live{border-color:rgba(245,158,11,.5);color:var(--amber-soft)}
+  .chip.live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--amber);display:inline-block;margin-right:.5em;vertical-align:.05em;box-shadow:0 0 0 0 rgba(245,158,11,.6);animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}70%{box-shadow:0 0 0 7px rgba(245,158,11,0)}100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}}
+
+  /* ---------- 紙カード（発音マーキング） ---------- */
+  .paper{
+    background:var(--paper);color:var(--paper-ink);
+    border-radius:var(--r);
+    padding:26px 26px 22px;
+    box-shadow:0 1px 0 rgba(255,255,255,.04), 0 30px 60px -24px rgba(0,0,0,.75), 0 8px 20px -12px rgba(0,0,0,.6);
+    background-image:repeating-linear-gradient(to bottom, transparent 0 33px, var(--paper-line) 33px 34px);
+    background-position:0 14px;
+    position:relative;
+    transform:rotate(-.5deg);
+  }
+  .paper::before{content:"";position:absolute;left:46px;top:0;bottom:0;width:1px;background:rgba(229,72,77,.28)}
+  .paper-tag{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--paper-dim);margin:0 0 12px 40px}
+  .sentence{font-family:var(--serif);font-size:clamp(1.35rem,3.4vw,1.9rem);line-height:2.35;margin:0 0 6px 40px;color:var(--paper-ink)}
+  .paper-note{font-size:.8rem;color:var(--paper-dim);margin:16px 0 0 40px;line-height:1.7}
+  .paper-note b{color:var(--paper-ink)}
+
+  /* 発音記号のインライン表現 */
+  .m{position:relative;white-space:nowrap}
+  .m-stress{color:var(--m-stress);font-weight:600}
+  .m-stress::before{content:"";position:absolute;left:50%;top:-.02em;transform:translate(-50%,-100%);
+    border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:7px solid var(--m-stress)}
+  .m-rise{color:var(--m-rise);font-weight:500}
+  .m-rise::after{content:"↗";font-family:var(--gothic);font-size:.7em;margin-left:.06em;vertical-align:.2em}
+  .m-drop{color:var(--m-drop);text-decoration:line-through;text-decoration-thickness:1.5px}
+  .m-link{color:var(--m-link)}
+  .m-link::after{content:"";position:absolute;left:6%;right:6%;bottom:-.12em;height:.42em;
+    border:2px solid var(--m-link);border-top:0;border-radius:0 0 10px 10px}
+  .m-flap{display:inline-block;color:var(--m-flap);border:1.6px solid var(--m-flap);border-radius:50%;
+    width:1.15em;height:1.15em;line-height:1.02em;text-align:center;font-size:.94em;vertical-align:.02em}
+  .m-red{color:var(--m-reduction);font-weight:500}
+  .m-red sup{font-family:var(--gothic);font-size:.5em;font-weight:700;letter-spacing:.02em;margin-left:.1em;vertical-align:.75em}
+  .m-swallow{color:var(--m-swallow);border-bottom:2px dotted var(--m-swallow);padding-bottom:.05em}
+
+  /* 記号レジェンド */
+  .legend{margin:20px 0 0;padding:18px 0 0;border-top:1px dashed var(--paper-line)}
+  .legend-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px 22px;margin:0 0 0 40px;padding:0;list-style:none}
+  @media(max-width:520px){.legend-grid{grid-template-columns:1fr;margin-left:0}.paper::before{display:none}.sentence,.paper-tag,.paper-note{margin-left:0}}
+  .legend-grid li{display:flex;align-items:baseline;gap:.6em;font-size:.86rem;color:var(--paper-dim)}
+  .legend-grid .ex{font-family:var(--serif);color:var(--paper-ink);min-width:5.6em}
+  .legend-grid .nm{font-weight:700;color:var(--paper-ink)}
+
+  /* ---------- 波の仕切り ---------- */
+  .waves{display:block;width:100%;height:46px;margin:0;overflow:visible}
+  .waves path{fill:none;stroke-width:5;stroke-linecap:round;vector-effect:non-scaling-stroke}
+  .w-recv{stroke:var(--wave-recv)}
+  .w-make{stroke:var(--wave-make);opacity:.9}
+
+  /* ---------- ① 3本の柱 ---------- */
+  .pillars{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:stretch;gap:14px;margin-top:32px}
+  @media(max-width:820px){.pillars{grid-template-columns:1fr}.pillars .arrow{transform:rotate(90deg);justify-self:center;padding:2px 0}}
+  .pillar{background:var(--ink-2);border:1px solid var(--line);border-radius:14px;padding:20px 18px}
+  .pillar h3{font-size:1.06rem;margin-bottom:.3rem;display:flex;align-items:center;gap:.5em}
+  .pillar .n{font-family:var(--mono);font-size:.7rem;color:var(--ink);padding:.15em .5em;border-radius:6px}
+  .pillar.recv{border-color:rgba(245,158,11,.35)}
+  .pillar.recv .n{background:var(--amber)}
+  .pillar.bridge{border-color:var(--line-2);background:linear-gradient(180deg,var(--ink-3),var(--ink-2))}
+  .pillar.bridge .n{background:var(--fg);color:var(--ink)}
+  .pillar.make .n{background:var(--fg);color:var(--ink)}
+  .pillar p{margin:.2rem 0 0;font-size:.9rem;color:var(--fg-dim)}
+  .pillar .zero{font-family:var(--mono);font-size:.72rem;color:var(--fg-faint);margin-top:.7rem;letter-spacing:.05em}
+  .arrow{display:flex;align-items:center;color:var(--fg-faint);font-size:1.3rem}
+
+  /* 画面マップ・技術 */
+  .subhead{font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--fg-faint);margin:40px 0 14px}
+  .screens{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;list-style:none;margin:0;padding:0}
+  @media(max-width:720px){.screens{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:440px){.screens{grid-template-columns:1fr}}
+  .screens li{background:var(--ink-2);border:1px solid var(--line);border-radius:11px;padding:13px 14px}
+  .screens .rt{font-family:var(--mono);font-size:.72rem;color:var(--amber-soft);letter-spacing:.02em}
+  .screens .ds{font-size:.82rem;color:var(--fg-dim);margin-top:.15rem}
+  .screens li.core{border-color:rgba(245,158,11,.4);background:var(--amber-ghost)}
+  .stack{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .stack .chip{background:transparent}
+
+  /* 実際の画面キャプチャ */
+  .shot{border:1px solid var(--line-2);border-radius:12px;overflow:hidden;background:var(--ink-2);margin:0}
+  .shot img{display:block;width:100%;height:auto}
+  .shot figcaption{padding:11px 13px;display:flex;flex-direction:column;gap:3px;border-top:1px solid var(--line)}
+  .shot .rt{font-family:var(--mono);font-size:.74rem;color:var(--amber-soft);letter-spacing:.01em}
+  .shot .ds{font-size:.8rem;color:var(--fg-dim);line-height:1.55}
+  .shot.feature{max-width:880px;margin:16px auto 0}
+  .shot.feature figcaption .rt{color:var(--amber);font-size:.82rem}
+  .shot .bar{display:flex;align-items:center;gap:6px;padding:9px 12px;background:var(--ink-3);border-bottom:1px solid var(--line)}
+  .shot .bar i{width:9px;height:9px;border-radius:50%;background:var(--fg-faint);display:block}
+  .shot .bar .u{margin-left:10px;font-family:var(--mono);font-size:.72rem;color:var(--fg-dim)}
+  .shots-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+  @media(max-width:720px){.shots-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:440px){.shots-grid{grid-template-columns:1fr}}
+
+  /* ---------- ② 面倒 before→after ---------- */
+  .pain{display:grid;gap:12px;margin-top:28px}
+  .pain-row{display:flex;flex-direction:column;gap:15px;
+    background:var(--ink-2);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .pain-top{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center}
+  @media(max-width:760px){.pain-top{grid-template-columns:1fr;gap:8px}.pain-top .to{transform:rotate(90deg);justify-self:start}}
+  .pain-shot{margin:2px auto 0;width:fit-content;max-width:100%;display:flex;justify-content:center;align-items:center;background:#fbfaf7;border:1px solid var(--line-2);border-radius:10px;padding:12px}
+  .pain-shot img{display:block;max-width:100%;max-height:300px;width:auto;height:auto;border-radius:5px}
+  .pain .before{color:var(--fg-dim)}
+  .pain .before .t{display:block;font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;color:var(--m-stress);text-transform:uppercase;margin-bottom:.25rem}
+  .pain .after{color:var(--fg)}
+  .pain .after .t{display:block;font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;color:var(--amber);text-transform:uppercase;margin-bottom:.25rem}
+  .pain .after b{color:var(--amber-soft);font-weight:700}
+  .pain .to{color:var(--fg-faint);font-size:1.2rem;font-family:var(--mono)}
+
+  /* ---------- ③ 理由 ---------- */
+  .why{margin-top:26px;max-width:64ch}
+  .why p{font-size:1.06rem;line-height:2;margin:0 0 1.1rem}
+  .why .pull{font-family:var(--mincho);font-weight:700;font-size:clamp(1.25rem,2.6vw,1.6rem);
+    color:var(--fg);line-height:1.6;border-left:3px solid var(--amber);padding:.2rem 0 .2rem 1.1rem;margin:1.6rem 0;text-wrap:balance}
+  .why .pull em{font-style:normal;color:var(--amber)}
+  .draft-note{margin-top:22px;background:var(--amber-ghost);border:1px dashed rgba(245,158,11,.5);
+    border-radius:12px;padding:13px 16px;font-size:.84rem;color:var(--amber-soft)}
+  .draft-note b{color:var(--amber)}
+
+  /* ---------- ④ 工夫と苦戦 ---------- */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:28px}
+  @media(max-width:800px){.cols{grid-template-columns:1fr}}
+  .col{border:1px solid var(--line);border-radius:16px;padding:22px 20px;background:var(--ink-2)}
+  .col.kufu{border-color:rgba(245,158,11,.3)}
+  .col.kusen{border-color:rgba(106,160,255,.28)}
+  .col h3{font-size:1.15rem;display:flex;align-items:center;gap:.55em;margin-bottom:.2rem}
+  .col .cap{font-size:.85rem;color:var(--fg-dim);margin:.1rem 0 1rem}
+  .badge{font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;padding:.3em .7em;border-radius:100px}
+  .kufu .badge{background:var(--amber);color:var(--ink)}
+  .kusen .badge{background:var(--steel);color:var(--ink)}
+  .pts{list-style:none;margin:0;padding:0;display:grid;gap:14px}
+  .pts li{padding-left:1.3em;position:relative}
+  .pts li::before{content:"";position:absolute;left:0;top:.62em;width:7px;height:7px;border-radius:2px;transform:rotate(45deg)}
+  .kufu .pts li::before{background:var(--amber)}
+  .kusen .pts li::before{background:var(--steel)}
+  .pts .h{display:block;font-weight:700;color:var(--fg);font-size:.98rem;line-height:1.55}
+  .pts .d{display:block;color:var(--fg-dim);font-size:.87rem;margin-top:.15rem;line-height:1.7}
+  .pts code{font-family:var(--mono);font-size:.82em;color:var(--amber-soft);background:rgba(255,255,255,.05);padding:.05em .4em;border-radius:5px}
+  .kusen .pts code{color:var(--steel)}
+
+  /* ---------- footer ---------- */
+  .foot{padding:clamp(52px,8vw,96px) 0 60px;border-top:1px solid var(--line);text-align:center}
+  .foot .story{font-family:var(--mincho);font-weight:700;font-size:clamp(1.4rem,3.4vw,2rem);line-height:1.6;text-wrap:balance;max-width:22ch;margin:0 auto}
+  .foot .story b{color:var(--amber)}
+  .foot .sub{color:var(--fg-dim);margin:1.2rem auto 0;max-width:52ch}
+  .foot-meta{display:flex;flex-wrap:wrap;gap:10px 26px;justify-content:center;margin-top:2.2rem;
+    font-family:var(--mono);font-size:.76rem;color:var(--fg-faint)}
+  .foot-meta b{color:var(--fg);font-weight:500}
+  .foot-meta .u{font-family:var(--gothic)}
+  .sig{margin-top:2.6rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;color:var(--fg-faint)}
+
+  /* reveal — 既定は「見える」。JSがある時だけ隠して、スクロールで出す（no-JS/印刷では常に表示） */
+  .js .reveal{opacity:0;transform:translateY(16px);transition:opacity .7s ease,transform .7s ease}
+  .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){
+    .js .reveal{opacity:1;transform:none;transition:none}
+    .chip.live::before{animation:none}
+  }
+  @media print{
+    .reveal{opacity:1!important;transform:none!important}
+    body{background:#0a0a0a}
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== HERO ===================== -->
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">卒業制作 · AI-Driven School · 第1期 金曜クラス</p>
+      <h1>repro-talk<span class="dot">.</span></h1>
+      <p class="thesis">完成された英語を <b>「100」</b> のまま受け取り、<br class="mk">
+        <b>「0」</b> から独り言で作り出す。</p>
+      <p class="lede">YouTubeで語られた学習法「リプロダクション＋独り言」を、教室ではなく <b style="color:var(--fg)">たった1人で毎日続ける</b> ための道具。紙とペンとChatGPTの往復を、1つのアプリに畳み込んだ。</p>
+      <div class="meta-row">
+        <span class="chip live">本番公開中 &nbsp;repro-talk.vercel.app</span>
+        <span class="chip">Next.js <span class="u">16</span></span>
+        <span class="chip">Supabase</span>
+        <span class="chip">Claude API</span>
+      </div>
+    </div>
+
+    <!-- 紙：発音マーキングの実物 -->
+    <div class="paper reveal">
+      <p class="paper-tag">Reproduction — 音を記号で捕まえる</p>
+      <p class="sentence">She's
+        <span class="m m-red">going&nbsp;to<sup>gonna</sup></span>
+        <span class="m m-stress">drink</span> a glass of
+        wa<span class="m-flap">t</span>er
+        <span class="m m-link">in&nbsp;the</span>
+        <span class="m-swallow">mountains</span>.</p>
+      <p class="paper-note">動画では紙に行間を空け、<b>カラーペンで音の記号</b>を書き込む。repro-talk はこの一手を画面上のドラッグ操作にした。</p>
+      <div class="legend">
+        <ul class="legend-grid">
+          <li><span class="ex m-stress" style="font-weight:600">WA·ter</span><span><b class="nm">強勢</b>／音の山</span></li>
+          <li><span class="ex" style="color:var(--m-rise)">really↗</span><span><b class="nm">上がる</b>音</span></li>
+          <li><span class="ex m-drop">good</span><span><b class="nm">脱落</b>する音</span></li>
+          <li><span class="ex" style="color:var(--m-link)">in‿the</span><span><b class="nm">リンキング</b></span></li>
+          <li><span class="ex">wa<span class="m-flap" style="font-size:.8em">t</span>er</span><span><b class="nm">フラップT</b></span></li>
+          <li><span class="ex" style="color:var(--m-reduction)">going→gonna</span><span><b class="nm">短縮</b></span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap" aria-hidden="true">
+  <svg class="waves" viewBox="0 0 1060 46" preserveAspectRatio="none">
+    <path class="w-recv" d="M0 16 q26.5 -16 53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0"/>
+    <path class="w-make" d="M0 30 q26.5 16 53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0 t53 0"/>
+  </svg>
+</div>
+
+<!-- ===================== ① 作ったもの ===================== -->
+<section class="band">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-no">① 作ったもの</span>
+      <h2>1人で続けるための、3本の導線</h2>
+    </div>
+    <p class="sec-sub reveal">学習法の主張は「必要なのは2つだけ」。<b style="color:var(--fg)">受け取る</b>と<b style="color:var(--fg)">作り出す</b>、そしてその2つを<b style="color:var(--fg)">繋ぐ</b>。アプリはこれをそのまま3本の柱にした。</p>
+
+    <div class="pillars reveal">
+      <div class="pillar recv">
+        <h3><span class="n">100</span>リプロダクション</h3>
+        <p>ネイティブ音声を1文再生して<b style="color:var(--amber-soft)">止め</b>、同じように言う。区間A-Bループ、0.5倍速で「音を顕微鏡で見る」。</p>
+        <p class="zero">100 を、100 のまま受け取る</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="pillar bridge">
+        <h3><span class="n">↔</span>フレーズ</h3>
+        <p>①で覚えた「型」を②へ受け渡す。<b style="color:var(--fg)">初回使用で卒業</b>し、翌日から出なくなる。ここで 0 と 100 が繋がる。</p>
+        <p class="zero">受け取った表現を、口へ</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="pillar make">
+        <h3><span class="n">0</span>独り言</h3>
+        <p>お題に沿って「1人電話」。歩きながらスマホ片手、Wake Lockで画面を保つ。録音の<b style="color:var(--fg)">音声は残さず時間だけ</b>。</p>
+        <p class="zero">0 から、自分の言葉を作る</p>
+      </div>
+    </div>
+
+    <p class="subhead reveal">6つの画面 — 実際に動いているもの</p>
+
+    <figure class="shot feature reveal">
+      <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span class="u">repro-talk.vercel.app/clips/…</span></div>
+      <img src="shots/clip.png" width="1280" height="860" loading="lazy"
+        alt="リプロダクション・ワークスペース。左にYouTubeプレイヤーとA-Bループ・録音、右にスクリプトへ7色の発音記号を付けた状態">
+      <figcaption>
+        <span class="rt">/clips/[id]　中心画面</span>
+        <span class="ds">左でA-Bループ・0.5倍速・録音、右でスクリプトに7種の記号。ヒーローの「紙」と同じ英文が、実物ではこう動く。</span>
+      </figcaption>
+    </figure>
+
+    <div class="shots-grid reveal">
+      <figure class="shot">
+        <img src="shots/home.png" width="1280" height="860" loading="lazy" alt="ダッシュボード。連続12日・12週ヒートマップ・Whyバナー・今週の記録">
+        <figcaption><span class="rt">/</span><span class="ds">ダッシュボード。連続日数・12週ヒートマップ・Why</span></figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="shots/materials.png" width="1280" height="860" loading="lazy" alt="素材ライブラリ。TEDなどの動画をL1〜L4のレベル別に管理">
+        <figcaption><span class="rt">/materials</span><span class="ds">素材ライブラリ。YouTubeをL1〜L4で管理</span></figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="shots/monologue.png" width="1280" height="860" loading="lazy" alt="独り言モード。今日のお題・1人電話ボタン・今日使うフレーズ">
+        <figcaption><span class="rt">/monologue</span><span class="ds">独り言モード。1人電話・今日使うフレーズ</span></figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="shots/phrases.png" width="1280" height="860" loading="lazy" alt="フレーズ・ストック。在庫と身についたの2区分">
+        <figcaption><span class="rt">/phrases</span><span class="ds">フレーズ・ストック。在庫／身についた</span></figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="shots/settings.png" width="1280" height="860" loading="lazy" alt="設定。英語の先に理解したい何かと、1日の独り言の目標">
+        <figcaption><span class="rt">/settings</span><span class="ds">英語の先に理解したい何か・独り言の目標</span></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ② 解決する面倒 ===================== -->
+<section class="band">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-no">② 解決する面倒</span>
+      <h2>「動画を見て終わり」にさせない</h2>
+    </div>
+    <p class="sec-sub reveal">学習法そのものは腑に落ちる。問題は、1人で続けようとした瞬間に挟まる<b style="color:var(--fg)">面倒</b>のほう。その一つひとつを消しにいった。</p>
+
+    <div class="pain reveal">
+      <div class="pain-row">
+        <div class="pain-top">
+          <div class="before"><span class="t">面倒</span>紙に行間を空け、カラーペン7色で音の記号を手書きする</div>
+          <div class="to">→</div>
+          <div class="after"><span class="t">repro-talk</span>スクリプトを<b>ドラッグして記号を付ける</b>マーキングエディタ。7種をそのまま画面に</div>
+        </div>
+        <figure class="pain-shot"><img src="shots/pain1-marking.png" width="656" height="691" loading="lazy" alt="スクリプトをドラッグして選択し、7種の発音記号を付けたマーキングエディタ"></figure>
+      </div>
+      <div class="pain-row">
+        <div class="pain-top">
+          <div class="before"><span class="t">面倒</span>分からない音や表現を、その都度ChatGPTに手動でコピペして聞く</div>
+          <div class="to">→</div>
+          <div class="after"><span class="t">repro-talk</span>選択して<b>AIに解説</b>。意味・使われ方・独り言でそのまま使える例文3つが返る</div>
+        </div>
+        <figure class="pain-shot"><img src="shots/pain2-explain.png" width="656" height="643" loading="lazy" alt="選択した表現をAIに質問すると、意味・使われ方・独り言で使える例文3つが返る"></figure>
+      </div>
+      <div class="pain-row">
+        <div class="pain-top">
+          <div class="before"><span class="t">面倒</span>リプロダクションで覚えた表現が、独り言で使われず眠る（0と100が繋がらない）</div>
+          <div class="to">→</div>
+          <div class="after"><span class="t">repro-talk</span>フレーズを①から②へ<b>受け渡し</b>、「今日使うフレーズ」に。使えたら卒業</div>
+        </div>
+        <figure class="pain-shot"><img src="shots/pain3-phrases.png" width="576" height="234" loading="lazy" alt="独り言モードの「今日使うフレーズ」。リプロダクションで得た在庫が並び、使えたらタップで卒業"></figure>
+      </div>
+      <div class="pain-row">
+        <div class="pain-top">
+          <div class="before"><span class="t">面倒</span>続けられているのか、やった事実が見えず自信にならない</div>
+          <div class="to">→</div>
+          <div class="after"><span class="t">repro-talk</span><b>連続日数・ヒートマップ・再現回数・独り言の合計時間</b>で可視化</div>
+        </div>
+        <figure class="pain-shot"><img src="shots/pain4-records.png" width="1104" height="336" loading="lazy" alt="ダッシュボードの続いている記録。連続12日・今週の独り言・リプロダクション回数と12週ヒートマップ"></figure>
+      </div>
+      <div class="pain-row">
+        <div class="pain-top">
+          <div class="before"><span class="t">面倒</span>練習用に音源を切り出したいが、ダウンロードは利用規約違反</div>
+          <div class="to">→</div>
+          <div class="after"><span class="t">repro-talk</span>音源に触れず、区間<b>A-Bループ＋「1回再生して止める」</b>で代替</div>
+        </div>
+        <figure class="pain-shot"><img src="shots/pain5-player.png" width="416" height="722" loading="lazy" alt="区間A-Bループと「1回再生して止める」。音源に触れず、YouTubeプレイヤー上で区間だけを扱う"></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ③ 作りたいと思った理由 ===================== -->
+<section class="band">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-no">③ 作りたいと思った理由</span>
+      <h2>続かない、ではなく「始められない」だった</h2>
+    </div>
+    <div class="why reveal">
+      <p>きっかけは1本のYouTube動画だった。「英語が話せなかった私が1年未満でペラペラになったたった1つの方法」。語られる学習法——完成された英語を100のまま受け取り、0から独り言で作り出す——は、これまで試したどの教材よりも説得力があった。これをやれば英語は伸びる。素直にそう思えた。</p>
+      <p class="pull">これをやれば伸びる——そう思えたのに、<br><em>始めることすら、できなかった。</em></p>
+      <p>よく言う「三日坊主で続かない」より、もっと手前だった。普段はPCとスマホでしか作業しない自分に、紙に書き出す習慣も、カラーペンも無い。「紙を用意して、行間を空けて、7色で音を書き込む」——その<b style="color:var(--fg)">最初の一歩</b>が面倒すぎて、踏み出せなかった。</p>
+      <p>面倒はそこだけではなかった。自分に合った動画を探す、練習する区間を選ぶ、その区間を何度も再生する、自分の声を録る、覚えたフレーズを書き留める——シンプルな勉強に見えて、<b style="color:var(--fg)">手が止まる場所が無数にあった</b>。続かないのは意志の弱さだと思っていたが、正体はこの小さな面倒の積み重ねのほうだった。</p>
+      <p>だから、意志で乗り越えるのをやめて、<b style="color:var(--fg)">面倒のほうを消す</b>ことにした。動画を探すところから、区間を選ぶ・繰り返し再生する・声を録る・フレーズを書き留めるまで——<b style="color:var(--fg)">学習が止まる理由を一つずつ、道具の側で潰していく</b>。紙もペンもChatGPTも、1つのアプリに畳み込んだ。すごいものを作りたかったわけではない。<b style="color:var(--fg)">毎日、ストレスなく始められて、そのまま続く</b>。それだけを狙って作った。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ④ 工夫と苦戦 ===================== -->
+<section class="band">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-no">④ 工夫と苦戦</span>
+      <h2>作ってみて気づいたこと</h2>
+    </div>
+    <p class="sec-sub reveal">学習法への忠実さと、ブラウザという実行環境の現実。その両方に、いくつも手を入れることになった。</p>
+
+    <div class="cols reveal">
+      <div class="col kufu">
+        <h3><span class="badge">工夫</span>止まる理由を、仕組みで消す</h3>
+        <p class="cap">面倒を減らし、「続く」までを設計した。</p>
+        <ul class="pts">
+          <li><span class="h">手が止まる場所を、そのまま機能にした</span><span class="d">動画を探す・区間を選ぶ・繰り返し再生する・声を録る・フレーズを残す——③で数えた「止まる場所」を一つずつ操作に翻訳。URLを貼る／A-Bで切り出す／<code>1回再生して止める</code>／ワンタップ録音。紙もカラーペンも要らない。</span></li>
+          <li><span class="h">AIをアプリに畳み込み、行き来をなくした</span><span class="d">音の解析・分からない箇所の解説・独り言の英語化・使えるフレーズの抽出——ChatGPTへコピペしていた作業を、他ツールへ移らず<b style="color:var(--fg)">アプリ内で完結</b>。LLMが不安定な数値位置を返さないよう <code>quote＋出現回数</code> で復元するなど、精度も作り込んだ。</span></li>
+          <li><span class="h">減らすだけでなく、「続く」を可視化した</span><span class="d">面倒を消すだけでは続かない。<b style="color:var(--fg)">連続日数・12週ヒートマップ・再現回数・独り言の合計時間</b>を常に見せ、やった事実を積み上げる。測るのは「聴いた回数」ではなく <code>言えた回数</code>。独り言は音声を残さず時間だけを刻む——可視化のための記録だから。</span></li>
+        </ul>
+      </div>
+
+      <div class="col kusen">
+        <h3><span class="badge">苦戦</span>環境が返してきた現実</h3>
+        <p class="cap">「動くはず」が動かない罠を、1つずつ踏んだ。</p>
+        <ul class="pts">
+          <li><span class="h">iOS Safari の録音は <code>audio/mp4</code></span><span class="d"><code>audio/webm</code> 決め打ちだと無音。<code>isTypeSupported</code> で分岐してようやく実機で録れた。</span></li>
+          <li><span class="h"><code>getUserMedia</code> が無反応で返らない</span><span class="d">マイク許可が返ってこないと無反応のボタンが残る。15秒でタイムアウトし、理由を出すようにした。</span></li>
+          <li><span class="h">YouTube IFrame の <code>end</code> はループしない</span><span class="d">区間ループが素直に作れず、<code>requestAnimationFrame</code> で終端を監視して <code>seekTo</code> で戻す実装に。</span></li>
+          <li><span class="h">選択がボタン押下で消える</span><span class="d">記号を付ける前に選択範囲が解除される。ツールバーは <code>onMouseDown</code> で <code>preventDefault()</code>。</span></li>
+          <li><span class="h">読み上げの固着から、クラウドTTS移行と本番の落とし穴まで</span><span class="d">ブラウザ標準の <code>speechSynthesis</code> は使ううちに声はあるのに <code>start</code> が来ず無音で固着し、<b style="color:var(--fg)">リロードでは戻らずブラウザ再起動が必要</b>だった。延命策では回復しきれないと判断し、<b style="color:var(--fg)">サーバで音声を生成 → <code>&lt;audio&gt;</code> で再生 → キャッシュ</b>するクラウドTTSへ全面移行。すると今度は本番の保存が三段の罠に阻まれた——<code>upload()</code> に ArrayBuffer を渡すと壊れ、Storage の RLS は <code>to authenticated</code> が効かず <code>auth.uid()</code> 判定が要り、SSR サーバはユーザーの認証を Storage に載せられずサーバ専用の <b style="color:var(--fg)">service role キー</b>で保存する必要があった。最後は本番だけ <code>Invalid Compact JWS</code> で弾かれ、<b style="color:var(--fg)">新形式キーではなく <code>eyJ…</code> の legacy JWT</b> が要ると突き止めて解決した。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FOOTER ===================== -->
+<footer class="foot">
+  <div class="wrap">
+    <p class="story reveal">何を作ったかより、<br><b>なぜ作ったか</b>。</p>
+    <p class="sub reveal">毎日の面倒から生まれたこの道具は、それ自体が自分にしか語れない物語になった。本気で最後まで作り上げることに勝る学びはない。</p>
+    <div class="foot-meta reveal">
+      <span>提出物&nbsp;<b class="u">この図解</b></span>
+      <span>発表&nbsp;<b>6</b><span class="u">分</span></span>
+      <span>本番&nbsp;<b class="u">repro-talk.vercel.app</b></span>
+    </div>
+    <p class="sig">repro-talk — 卒業制作『自分の武器を作る』 · AI-Driven School</p>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var els = document.querySelectorAll('.reveal');
+    if(!('IntersectionObserver' in window)){els.forEach(function(e){e.classList.add('in')});return;}
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target);} });
+    },{rootMargin:'0px 0px -8% 0px',threshold:.08});
+    els.forEach(function(e){io.observe(e)});
+  })();
+</script>
+</body>
+</html>
