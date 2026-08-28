@@ -7,6 +7,16 @@
 
 `index.html` をブラウザで直接開く（サーバー不要）。**`F` で全画面にしてから発表する。**
 
+公開版: https://repro-talk-slides.surge.sh （図解 https://repro-talk.surge.sh とは別ドメイン）
+**本番はローカルのファイルを開くほうが安全**（会場のネットワークに依存しない）。公開版は共有・保険用。
+
+再デプロイ:
+
+```sh
+cd docs/slides
+surge ./ repro-talk-slides.surge.sh
+```
+
 | キー | 動作 |
 |---|---|
 | `→` `←` `Space` | 次 / 前へ（画面クリックでも次へ） |
