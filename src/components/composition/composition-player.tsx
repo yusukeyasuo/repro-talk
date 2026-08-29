@@ -168,11 +168,13 @@ export function CompositionPlayer({
     return clearTimer;
   }, [runThink, thinkMs, finished, total, clearTimer]);
 
-  function onTap() {
-    if (paused) {
-      resume();
-      return;
-    }
+  // 送り（フッターのボタン専用）。画面の真ん中は一時停止に割り当てたので、送りはここだけが担う。
+  // 一時停止したまま送ると無音で止まったままになるので、送るときは必ず止まりを解く。
+  function advance() {
+    // 最後の1文を送ると完了画面へ抜ける。そこでは画面を点けておく必要がないので取り直さない
+    // （goNext 側の release と競って、取り直しだけが後から効いてしまうのを防ぐ）。
+    const willFinish = revealedRef.current && index + 1 >= total;
+    if (pausedRef.current) clearPaused(!willFinish);
     if (!revealedRef.current) reveal(); // 考える時間中：今すぐ答えを表示＋読み上げ→自動で次へ
     else goNext(); // 答え表示中：もう次へ
   }
@@ -186,10 +188,15 @@ export function CompositionPlayer({
     void releaseWakeLock();
   }
 
-  function resume() {
+  // 止まっている状態だけ解く（タイマーは張り直さない）。送りの前処理としても使う。
+  function clearPaused(reacquireWakeLock = true) {
     pausedRef.current = false;
     setPaused(false);
-    void requestWakeLock();
+    if (reacquireWakeLock) void requestWakeLock();
+  }
+
+  function resume() {
+    clearPaused();
     if (revealedRef.current) {
       runAnswer(); // 答えは頭から読み直す（speechSynthesis の pause/resume は端末差が大きく不安定）
     } else {
@@ -336,22 +343,48 @@ export function CompositionPlayer({
       ) : (
         <button
           type="button"
-          onClick={onTap}
+          onClick={togglePause}
           className="relative flex flex-1 cursor-pointer flex-col items-center justify-center gap-8 px-6 text-center"
-          aria-label={paused ? '再開' : revealed ? '次へ' : '答えを見る'}
+          aria-label={paused ? '再開' : '一時停止'}
         >
-          {/* 日本語（font-mono に入れない＝豆腐対策） */}
-          <p className="max-w-2xl text-2xl leading-relaxed sm:text-3xl">{current?.ja}</p>
+          {/* 一時停止の合図は英文を覆わない（覆うと「止めて英文を見る」ができない）。
+              上端の小さなピルだけで示し、本体はそのまま読ませる。 */}
+          {paused && (
+            <span className="pointer-events-none absolute top-4 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border bg-background/90 px-4 py-2 text-sm font-medium shadow-sm">
+              <Play className="size-4" />
+              タップで再開
+            </span>
+          )}
+
+          {/* 日本語（font-mono に入れない＝豆腐対策）。一時停止中は英文を主役にして一段落とす。 */}
+          <p
+            className={cn(
+              'max-w-2xl leading-relaxed',
+              paused && revealed
+                ? 'text-xl text-muted-foreground sm:text-2xl'
+                : 'text-2xl sm:text-3xl',
+            )}
+          >
+            {current?.ja}
+          </p>
 
           {/* 考える時間ゲージ / 答え */}
-          <div className="flex min-h-[4rem] w-full max-w-md flex-col items-center gap-2">
+          <div className="flex min-h-[4rem] w-full max-w-2xl flex-col items-center gap-3">
             {revealed ? (
               <>
-                <p className="font-mono text-xl text-foreground sm:text-2xl">{current?.en}</p>
+                {/* 止めているあいだは大きく。max-w-md だと折り返しが増えて読みにくい */}
+                <p
+                  className={cn(
+                    'font-mono leading-relaxed text-foreground',
+                    paused ? 'text-2xl sm:text-4xl' : 'text-xl sm:text-2xl',
+                  )}
+                >
+                  {current?.en}
+                </p>
                 {/* 再現の間だけ細いゲージで残りを見せる（読み上げ中は出さない）。
                     key で文が変わるたびに頭から流し直す。一時停止は凍結。 */}
                 {reproducing && (
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-1.5 w-full max-w-md overflow-hidden rounded-full bg-muted">
                     <div
                       key={`rep-${index}`}
                       className="h-full origin-left rounded-full bg-foreground/50"
@@ -363,12 +396,12 @@ export function CompositionPlayer({
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {reproducing ? '声に出して再現' : '読み上げ中…'}
+                  {paused ? '一時停止中' : reproducing ? '声に出して再現' : '読み上げ中…'}
                 </p>
               </>
             ) : (
               <>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div className="h-2 w-full max-w-md overflow-hidden rounded-full bg-muted">
                   {/* key で文が変わるたびにアニメーションを頭から流し直す。一時停止は
                       再マウントせず animation-play-state を止める＝凍結位置から再開できる。 */}
                   <div
@@ -380,45 +413,35 @@ export function CompositionPlayer({
                     }}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">考える時間</p>
+                <p className="text-xs text-muted-foreground">
+                  {paused ? '一時停止中' : '考える時間'}
+                </p>
               </>
             )}
           </div>
-
-          {/* 一時停止オーバーレイ。ボタンの入れ子を避けるため中は div のみ＝タップは親へ届き再開する。 */}
-          {paused && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/95">
-              <div className="grid size-14 place-items-center rounded-full bg-accent">
-                <Pause className="size-7" />
-              </div>
-              <div>
-                <p className="text-lg font-medium">一時停止中</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  画面をタップすると続きから再開します
-                </p>
-              </div>
-              <span className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium">
-                <Play className="size-4" />
-                再開
-              </span>
-            </div>
-          )}
         </button>
       )}
 
       {/* フッター */}
       {!finished && (
-        <div className="flex items-center justify-between gap-3 border-t px-4 py-3">
-          <p className="text-xs text-muted-foreground">答えは自動で読み上げます</p>
-          <Button variant="outline" size="sm" onClick={onTap} disabled={paused}>
+        <div className="flex flex-col gap-2 border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <p className="text-center text-xs text-muted-foreground sm:text-left">
+            答えは自動で読み上げます・画面の真ん中をタップで一時停止
+          </p>
+          {/* 歩きながら片手で押せるよう、スマホでは全幅＋高さを取る */}
+          <Button
+            size="lg"
+            onClick={advance}
+            className="h-14 w-full rounded-full text-base sm:h-10 sm:w-auto sm:min-w-40 sm:rounded-lg sm:text-sm"
+          >
             {revealed ? (
               <>
                 次へ
-                <ChevronRight className="size-4" />
+                <ChevronRight className="size-5" />
               </>
             ) : (
               <>
-                <Eye className="size-4" />
+                <Eye className="size-5" />
                 答えを見る
               </>
             )}
