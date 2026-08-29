@@ -1,6 +1,16 @@
 'use client';
 
-import { Check, ChevronRight, Eye, Pause, Play, RotateCcw, Star, X } from 'lucide-react';
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Pause,
+  Play,
+  RotateCcw,
+  Star,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -68,6 +78,10 @@ export function CompositionPlayer({
   // 現タイマーの締切（performance.now 基準）と、一時停止時に保存する残り時間。
   const deadlineRef = useRef(0);
   const remainingRef = useRef(0);
+  // 読み上げ〜再現の間の「世代」。送り／戻り／停止のたびに進める。
+  // speechSynthesis は cancel でも end を飛ばすので、これが無いと古い読み上げの
+  // onend が後から届いて、次の文のタイマーを奪ってしまう。
+  const runRef = useRef(0);
 
   const current = sequence[index];
 
@@ -94,6 +108,7 @@ export function CompositionPlayer({
   );
 
   const goNext = useCallback(() => {
+    runRef.current += 1;
     clearTimer();
     stopSpeaking();
     revealedRef.current = false;
@@ -110,13 +125,15 @@ export function CompositionPlayer({
 
   // 答えフェーズ：現在の英語を読み上げ、読み終えたら「再現の間」を挟んでから次へ送る。
   const runAnswer = useCallback(() => {
+    const run = (runRef.current += 1);
     const en = sequence[index]?.en ?? '';
     setReproducing(false); // 読み上げ中はまだ再現フェーズではない（resume での読み直しでも戻す）
     setSpeaking(false); // 音が出るまでは「準備中」を出す
     let toReproduce = false;
     // 読み上げ完了（onend／保険タイマー）→ 声に出して再現する間をとってから次へ。
     const startReproduce = () => {
-      if (toReproduce || pausedRef.current) return; // 一時停止中の割り込みでは進めない
+      // 一時停止中／すでに別の文へ移ったあとの割り込みでは進めない
+      if (toReproduce || run !== runRef.current || pausedRef.current) return;
       toReproduce = true;
       setReproducing(true);
       arm(REPRODUCE_PAUSE_MS, goNext);
@@ -185,7 +202,30 @@ export function CompositionPlayer({
     else goNext(); // 答え表示中：もう次へ
   }
 
+  // 戻り。聞き逃した／もう一度やり直したい文へ1つ下がる。
+  // 答えを出しっぱなしにはせず「考える時間」から始める（すぐ聞きたいなら「答えを見る」で飛ばせる。
+  // 逆に答えから始めると、その文をもう一度自力で作るという肝心の練習ができない）。
+  // 完了画面からは index を動かさず、最後の文へ戻る。
+  function goPrev() {
+    if (!finished && index === 0) return;
+    runRef.current += 1;
+    clearTimer();
+    stopSpeaking();
+    if (pausedRef.current) clearPaused(); // 止めたまま戻ると無音で固まる
+    revealedRef.current = false;
+    setRevealed(false);
+    setReproducing(false);
+    setSpeaking(false);
+    if (finished) {
+      setFinished(false);
+      void requestWakeLock(); // 完了時に手放しているので取り直す
+    } else {
+      setIndex(index - 1);
+    }
+  }
+
   function pause() {
+    runRef.current += 1;
     pausedRef.current = true;
     setPaused(true);
     remainingRef.current = Math.max(0, deadlineRef.current - performance.now());
@@ -241,6 +281,7 @@ export function CompositionPlayer({
   }
 
   function restart() {
+    runRef.current += 1;
     clearTimer();
     speaker.cancel();
     pausedRef.current = false;
@@ -339,7 +380,12 @@ export function CompositionPlayer({
               <span className="font-mono tabular-nums">{doneThisRound}</span> 文を声に出しました。
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
+            {/* 最後の1文を聞き逃したまま完了してしまったとき用。もう一周（先頭から）とは別物。 */}
+            <Button variant="ghost" onClick={goPrev}>
+              <ChevronLeft className="size-4" />
+              最後の文へ
+            </Button>
             <Button variant="outline" onClick={restart}>
               <RotateCcw className="size-4" />
               もう一周
@@ -443,23 +489,36 @@ export function CompositionPlayer({
             答えは自動で読み上げます・画面の真ん中をタップで一時停止
           </p>
           {/* 歩きながら片手で押せるよう、スマホでは全幅＋高さを取る */}
-          <Button
-            size="lg"
-            onClick={advance}
-            className="h-14 w-full rounded-full text-base sm:h-10 sm:w-auto sm:min-w-40 sm:rounded-lg sm:text-sm"
-          >
-            {revealed ? (
-              <>
-                次へ
-                <ChevronRight className="size-5" />
-              </>
-            ) : (
-              <>
-                <Eye className="size-5" />
-                答えを見る
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={goPrev}
+              disabled={index === 0}
+              aria-label="1つ前の文に戻る"
+              title="1つ前の文に戻る（考える時間から）"
+              className="size-14 shrink-0 rounded-full sm:size-10 sm:rounded-lg"
+            >
+              <ChevronLeft className="size-5" />
+            </Button>
+            <Button
+              size="lg"
+              onClick={advance}
+              className="h-14 flex-1 rounded-full text-base sm:h-10 sm:min-w-40 sm:flex-none sm:rounded-lg sm:text-sm"
+            >
+              {revealed ? (
+                <>
+                  次へ
+                  <ChevronRight className="size-5" />
+                </>
+              ) : (
+                <>
+                  <Eye className="size-5" />
+                  答えを見る
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       )}
     </div>
