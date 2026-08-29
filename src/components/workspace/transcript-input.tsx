@@ -4,6 +4,7 @@ import { ExternalLink, Scissors } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { TRANSCRIPT_BOOKMARKLET_HREF } from '@/lib/transcript-bookmarklet';
 import { cleanTranscript, trimTranscriptToRange } from '@/lib/transcript';
@@ -147,6 +148,7 @@ export function TranscriptInput({
           タイムスタンプを除去
         </Button>
         <Button size="sm" onClick={() => onSave(raw.trim())} disabled={!raw.trim() || saving}>
+          {saving && <Spinner className="size-3.5" />}
           {saving ? '保存中…' : 'スクリプトを保存'}
         </Button>
         {onCancel && (

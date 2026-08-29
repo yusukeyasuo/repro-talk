@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Loader2, Mic, Shuffle, Sparkles, Square } from 'lucide-react';
+import { Check, Mic, Shuffle, Sparkles, Square } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -9,6 +9,7 @@ import { saveMonologueFeedback, saveMonologueSession } from '@/app/actions/monol
 import { addPhrases, markPhraseUsed } from '@/app/actions/phrases';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { useRecorder } from '@/hooks/use-recorder';
 import { useWakeLock } from '@/hooks/use-wake-lock';
@@ -191,7 +192,7 @@ export function MonologueSession({ topics, phrases, goalSec }: Props) {
             disabled={recorder.state === 'requesting' || saving}
           >
             {saving ? (
-              <Loader2 className="size-5 animate-spin" />
+              <Spinner className="size-5" />
             ) : recorder.isRecording ? (
               <Square className="size-5" />
             ) : (
@@ -282,7 +283,7 @@ export function MonologueSession({ topics, phrases, goalSec }: Props) {
           placeholder={'「電車が遅れてイライラした」って言いたかったけど出てこなかった'}
         />
         <Button onClick={askAi} disabled={askingAi || !jaMemo.trim()}>
-          <Sparkles className="size-4" />
+          {askingAi ? <Spinner /> : <Sparkles className="size-4" />}
           {askingAi ? '考え中…' : '英語にしてもらう'}
         </Button>
 

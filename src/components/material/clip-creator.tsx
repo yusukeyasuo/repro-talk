@@ -10,6 +10,7 @@ import { YouTubePlayer, type PlayerHandle } from '@/components/player/youtube-pl
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { formatSeconds } from '@/lib/youtube';
 
 type Props = {
@@ -120,7 +121,7 @@ export function ClipCreator({ materialId, videoId }: Props) {
             区間をループ再生
           </Button>
           <Button onClick={submit} disabled={!canCreate || pending}>
-            <Scissors className="size-4" />
+            {pending ? <Spinner /> : <Scissors className="size-4" />}
             {pending ? '作成中…' : 'クリップを作る'}
           </Button>
         </div>

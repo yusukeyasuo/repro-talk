@@ -50,7 +50,7 @@ function initFallback() {
   }, 8000);
 }
 
-function fallbackSpeak(text: string, onend: () => void) {
+function fallbackSpeak(text: string, onstart: () => void, onend: () => void) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     onend();
     return;
@@ -65,6 +65,7 @@ function fallbackSpeak(text: string, onend: () => void) {
     done = true;
     onend();
   };
+  u.onstart = onstart;
   u.onend = fin;
   u.onerror = fin;
   synth.speak(u);
@@ -136,11 +137,22 @@ export function unlock() {
   }
 }
 
-/** 読み上げる。終わったら onend を1回だけ呼ぶ。クラウド不可/失敗時は自動でフォールバック。 */
-export function speak(text: string, opts?: { onend?: () => void }) {
+/**
+ * 読み上げる。終わったら onend を1回だけ呼ぶ。クラウド不可/失敗時は自動でフォールバック。
+ * `onstart` は**実際に音が出はじめた**ときに1回だけ呼ぶ。初出の文はサーバでMP3を
+ * 生成するぶん数秒待つことがあり、その間を「読み上げ中」と出すと黙って固まって見える。
+ */
+export function speak(text: string, opts?: { onstart?: () => void; onend?: () => void }) {
   initFallback();
   const onend = opts?.onend ?? (() => {});
+  const onstart = opts?.onstart ?? (() => {});
   let handled = false;
+  let started = false;
+  const startOnce = () => {
+    if (started) return;
+    started = true;
+    onstart();
+  };
   const endOnce = () => {
     if (handled) return;
     handled = true;
@@ -149,7 +161,7 @@ export function speak(text: string, opts?: { onend?: () => void }) {
   const toFallback = () => {
     if (handled) return;
     handled = true;
-    fallbackSpeak(text, onend);
+    fallbackSpeak(text, startOnce, onend);
   };
 
   void getUrl(text)
@@ -164,6 +176,7 @@ export function speak(text: string, opts?: { onend?: () => void }) {
         toFallback();
         return;
       }
+      a.onplaying = startOnce;
       a.onended = endOnce;
       a.onerror = toFallback;
       try {

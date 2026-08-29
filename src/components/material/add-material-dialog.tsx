@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { MATERIAL_LEVELS, type MaterialLevel } from '@/types/database';
 import { cn } from '@/lib/utils';
 
@@ -100,6 +101,7 @@ export function AddMaterialDialog() {
             キャンセル
           </Button>
           <Button onClick={submit} disabled={pending || !url.trim()}>
+            {pending && <Spinner />}
             {pending ? '追加中…' : '追加する'}
           </Button>
         </DialogFooter>

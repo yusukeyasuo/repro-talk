@@ -3,7 +3,6 @@
 import {
   Check,
   Ear,
-  Loader2,
   Mic,
   Pause,
   Play,
@@ -24,6 +23,7 @@ import { SentencePlayer, type SentencePlayerHandle } from '@/components/workspac
 import { TranscriptInput } from '@/components/workspace/transcript-input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { extensionForMimeType, useRecorder, type RecordedClip } from '@/hooks/use-recorder';
 import { reanchorAnnotations } from '@/lib/annotation-anchor';
@@ -505,7 +505,7 @@ export function Workspace({ clip, material, userId }: Props) {
         <div className="space-y-3 rounded-lg border p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium">自分の音を録る</h3>
-            {uploading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+            {uploading && <Spinner className="size-4 text-muted-foreground" />}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -565,7 +565,7 @@ export function Workspace({ clip, material, userId }: Props) {
                 </Button>
               ) : repSaveState === 'saving' ? (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <Spinner className="size-3.5" />
                   記録中…
                 </span>
               ) : repSaveState === 'saved' ? (
@@ -616,13 +616,13 @@ export function Workspace({ clip, material, userId }: Props) {
               )}
               {isText && transcript && !editingTranscript && (
                 <Button size="sm" variant="outline" onClick={naturalize} disabled={naturalizing}>
-                  <Sparkles className="size-4" />
+                  {naturalizing ? <Spinner className="size-3.5" /> : <Sparkles className="size-4" />}
                   {naturalizing ? '推敲中…' : 'AIで自然にする'}
                 </Button>
               )}
               {transcript && !editingTranscript && (
                 <Button size="sm" variant="outline" onClick={analyze} disabled={analyzing}>
-                  <Sparkles className="size-4" />
+                  {analyzing ? <Spinner className="size-3.5" /> : <Sparkles className="size-4" />}
                   {analyzing ? '解析中…' : 'AI で音を解析'}
                 </Button>
               )}
@@ -632,7 +632,7 @@ export function Workspace({ clip, material, userId }: Props) {
                 </Button>
               ) : dirty ? (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <Spinner className="size-3.5" />
                   保存中…
                 </span>
               ) : saveState === 'saved' ? (
@@ -643,6 +643,14 @@ export function Workspace({ clip, material, userId }: Props) {
               ) : null}
             </div>
           </div>
+
+          {(analyzing || naturalizing) && (
+            <p className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+              <Spinner className="size-4" />
+              {analyzing ? 'AI が音の記号を付けています。' : 'AI が英文を推敲しています。'}
+              10〜30秒ほどかかります。
+            </p>
+          )}
 
           {editingTranscript ? (
             isText ? (
@@ -659,6 +667,7 @@ export function Workspace({ clip, material, userId }: Props) {
                     onClick={() => saveTranscript(draft)}
                     disabled={pending || !draft.trim()}
                   >
+                    {pending && <Spinner />}
                     {pending ? '保存中…' : '保存'}
                   </Button>
                   {transcript && (
