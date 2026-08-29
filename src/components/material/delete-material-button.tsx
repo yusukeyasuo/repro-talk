@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { deleteMaterial } from '@/app/actions/materials';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Dialog,
   DialogContent,
@@ -77,6 +78,7 @@ export function DeleteMaterialButton({
             キャンセル
           </Button>
           <Button variant="destructive" onClick={confirm} disabled={pending}>
+            {pending && <Spinner />}
             {pending ? '削除中…' : '削除する'}
           </Button>
         </DialogFooter>

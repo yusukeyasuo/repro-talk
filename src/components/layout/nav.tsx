@@ -1,9 +1,10 @@
 'use client';
 
-import { BookOpen, Home, Library, Mic, Quote, Settings, Zap } from 'lucide-react';
-import Link from 'next/link';
+import { BookOpen, Home, Library, Mic, Quote, Settings, Zap, type LucideIcon } from 'lucide-react';
+import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 const ITEMS = [
@@ -15,6 +16,20 @@ const ITEMS = [
   { href: '/guide', label: '使い方', icon: BookOpen, exact: false },
   { href: '/settings', label: '設定', icon: Settings, exact: false },
 ];
+
+/**
+ * タップした瞬間にアイコンをスピナーへ差し替える。(app) 配下はどれも force-dynamic で
+ * サーバの応答を待つため、これが無いとスマホでは「押せたのか」が分からない。
+ * `useLinkStatus` は Link の子孫でしか使えないので、専用の子コンポーネントにする。
+ */
+function NavIcon({ icon: Icon, className }: { icon: LucideIcon; className?: string }) {
+  const { pending } = useLinkStatus();
+  return pending ? (
+    <Spinner className={className} aria-label="読み込み中" />
+  ) : (
+    <Icon className={className} />
+  );
+}
 
 function useActive() {
   const pathname = usePathname();
@@ -43,7 +58,7 @@ export function TopNav() {
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <Icon className="size-4" />
+              <NavIcon icon={Icon} className="size-4" />
               {label}
             </Link>
           ))}
@@ -68,7 +83,7 @@ export function BottomNav() {
                 isActive(href, exact) ? 'text-foreground' : 'text-muted-foreground',
               )}
             >
-              <Icon className="size-5" />
+              <NavIcon icon={Icon} className="size-5" />
               {label}
             </Link>
           </li>

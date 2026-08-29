@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import * as speaker from '@/lib/speaker';
 import { cn } from '@/lib/utils';
@@ -491,6 +492,7 @@ function EditCourseDialog({ course }: { course: CompositionCourse }) {
             キャンセル
           </Button>
           <Button onClick={submit} disabled={pending || !title.trim()}>
+            {pending && <Spinner />}
             {pending ? '保存中…' : '保存'}
           </Button>
         </DialogFooter>
@@ -542,6 +544,7 @@ function DeleteCourseDialog({ courseId, title }: { courseId: string; title: stri
             キャンセル
           </Button>
           <Button variant="destructive" onClick={confirm} disabled={pending}>
+            {pending && <Spinner />}
             {pending ? '削除中…' : '削除する'}
           </Button>
         </DialogFooter>

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { logCompositionReps, updateComposition } from '@/app/actions/compositions';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { useWakeLock } from '@/hooks/use-wake-lock';
 import * as speaker from '@/lib/speaker';
 import { cn } from '@/lib/utils';
@@ -48,6 +49,9 @@ export function CompositionPlayer({
   const [revealed, setRevealed] = useState(false);
   // 読み上げ後の「声に出して再現する間」に入っているか（ゲージ・ラベルの出し分け用）。
   const [reproducing, setReproducing] = useState(false);
+  // 実際に音が鳴りはじめたか。初出の文はサーバでMP3を作るぶん数秒待つので、
+  // その間を「読み上げ中」と出すと黙って固まって見える（「音声を準備中」と分ける）。
+  const [speaking, setSpeaking] = useState(false);
   const [finished, setFinished] = useState(false);
   const [doneThisRound, setDoneThisRound] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -94,6 +98,7 @@ export function CompositionPlayer({
     stopSpeaking();
     revealedRef.current = false;
     setReproducing(false);
+    setSpeaking(false);
     if (index + 1 >= total) {
       setFinished(true);
       void releaseWakeLock();
@@ -107,6 +112,7 @@ export function CompositionPlayer({
   const runAnswer = useCallback(() => {
     const en = sequence[index]?.en ?? '';
     setReproducing(false); // 読み上げ中はまだ再現フェーズではない（resume での読み直しでも戻す）
+    setSpeaking(false); // 音が出るまでは「準備中」を出す
     let toReproduce = false;
     // 読み上げ完了（onend／保険タイマー）→ 声に出して再現する間をとってから次へ。
     const startReproduce = () => {
@@ -115,7 +121,7 @@ export function CompositionPlayer({
       setReproducing(true);
       arm(REPRODUCE_PAUSE_MS, goNext);
     };
-    speaker.speak(en, { onend: startReproduce });
+    speaker.speak(en, { onstart: () => setSpeaking(true), onend: startReproduce });
     // onend が来ない/遅い環境向けの保険。クラウド音声の読み込み待ちも見込んで長めに。
     const safetyMs = Math.min(20000, Math.max(6000, en.length * 110));
     arm(safetyMs, startReproduce);
@@ -241,6 +247,7 @@ export function CompositionPlayer({
     revealedRef.current = false;
     setPaused(false);
     setReproducing(false);
+    setSpeaking(false);
     setDoneThisRound(0);
     setFinished(false);
     setRevealed(false);
@@ -395,8 +402,15 @@ export function CompositionPlayer({
                     />
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  {paused ? '一時停止中' : reproducing ? '声に出して再現' : '読み上げ中…'}
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {!paused && !reproducing && !speaking && <Spinner className="size-3.5" />}
+                  {paused
+                    ? '一時停止中'
+                    : reproducing
+                      ? '声に出して再現'
+                      : speaking
+                        ? '読み上げ中…'
+                        : '音声を準備中…'}
                 </p>
               </>
             ) : (

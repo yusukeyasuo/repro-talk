@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { signOut, updateProfile } from '@/app/actions/profile';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
@@ -80,6 +81,7 @@ export function SettingsForm({
 
       <div className="flex items-center gap-2">
         <Button onClick={save} disabled={pending}>
+          {pending && <Spinner />}
           {pending ? '保存中…' : '保存'}
         </Button>
         <Button

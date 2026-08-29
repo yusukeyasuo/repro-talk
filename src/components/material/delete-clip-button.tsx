@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { deleteClip } from '@/app/actions/clips';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Dialog,
   DialogContent,
@@ -71,6 +72,7 @@ export function DeleteClipButton({
             キャンセル
           </Button>
           <Button variant="destructive" onClick={confirm} disabled={pending}>
+            {pending && <Spinner />}
             {pending ? '削除中…' : '削除する'}
           </Button>
         </DialogFooter>

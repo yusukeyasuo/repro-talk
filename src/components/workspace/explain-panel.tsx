@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
 
 type ExplainResult = {
   headline: string;
@@ -79,10 +80,17 @@ export function ExplainPanel({ transcript, onAppendMemo }: Props) {
           placeholder="ここの yet はどういう意味？"
         />
         <Button onClick={ask} disabled={loading || !question.trim()}>
-          <Sparkles className="size-4" />
-          {loading ? '…' : '聞く'}
+          {loading ? <Spinner /> : <Sparkles className="size-4" />}
+          {loading ? '考え中…' : '聞く'}
         </Button>
       </div>
+
+      {loading && (
+        <p className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          <Spinner className="size-4" />
+          AI が答えを書いています。10〜30秒ほどかかります。
+        </p>
+      )}
 
       {result && (
         <div className="space-y-3 rounded-lg border p-4 text-sm">

@@ -1,9 +1,10 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { getTtsUrl, prefetch } from '@/lib/speaker';
 
 // preservesPitch は比較的新しい標準プロパティ。lib の版差で型が無くても壊れないよう緩く扱う。
@@ -178,7 +179,7 @@ export function SentencePlayer({
 
       {loading && (
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" />
+          <Spinner className="size-3.5" />
           音声を用意中…
         </p>
       )}

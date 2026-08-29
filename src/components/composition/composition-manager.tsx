@@ -22,6 +22,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import * as speaker from '@/lib/speaker';
 import { parseCompositionsCsv } from '@/lib/composition-csv';
@@ -148,7 +149,7 @@ function AddCompositionForm({ courseId }: { courseId: string }) {
         </div>
       </div>
       <Button onClick={submit} disabled={pending || !ja.trim() || !en.trim()}>
-        <Plus className="size-4" />
+        {pending ? <Spinner /> : <Plus className="size-4" />}
         {pending ? '追加中…' : '例文を追加'}
       </Button>
     </div>
@@ -244,6 +245,7 @@ function ImportCsvDialog({ courseId }: { courseId: string }) {
             キャンセル
           </Button>
           <Button onClick={submit} disabled={pending || parsed.rows.length === 0}>
+            {pending && <Spinner />}
             {pending ? '登録中…' : '登録する'}
           </Button>
         </DialogFooter>
@@ -408,6 +410,7 @@ function EditCompositionDialog({ composition }: { composition: Composition }) {
             キャンセル
           </Button>
           <Button onClick={submit} disabled={pending || !ja.trim() || !en.trim()}>
+            {pending && <Spinner />}
             {pending ? '保存中…' : '保存'}
           </Button>
         </DialogFooter>

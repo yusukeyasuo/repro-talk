@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 
 export function AddCourseDialog() {
@@ -87,6 +88,7 @@ export function AddCourseDialog() {
             キャンセル
           </Button>
           <Button onClick={submit} disabled={pending || !title.trim()}>
+            {pending && <Spinner />}
             {pending ? '作成中…' : '作成する'}
           </Button>
         </DialogFooter>

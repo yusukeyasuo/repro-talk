@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { addPhrases } from '@/app/actions/phrases';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 
 type Candidate = { text: string; meaning_ja: string; why: string };
 
@@ -63,7 +64,7 @@ export function PhrasePanel({ clipId, transcript }: Props) {
   return (
     <div className="space-y-3">
       <Button variant="outline" size="sm" onClick={extract} disabled={loading || !transcript}>
-        <Sparkles className="size-4" />
+        {loading ? <Spinner className="size-3.5" /> : <Sparkles className="size-4" />}
         {loading ? '抽出中…' : '独り言で使えるフレーズを抽出'}
       </Button>
 
