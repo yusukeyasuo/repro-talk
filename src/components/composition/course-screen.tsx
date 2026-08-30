@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { deleteCourse, updateComposition, updateCourse } from '@/app/actions/compositions';
 import { CompositionManager } from '@/components/composition/composition-manager';
 import { CompositionPlayer, type PlayProgress } from '@/components/composition/composition-player';
+import { useStudyGuard } from '@/components/study/study-guard';
 import { StudyStarter } from '@/components/study/study-starter';
 import { Button } from '@/components/ui/button';
 import {
@@ -71,6 +72,7 @@ export function CourseScreen({
   running: StudySession | null;
 }) {
   const router = useRouter();
+  const { guard, dialog: studyGuardDialog } = useStudyGuard('composition', running);
   const [mode, setMode] = useState<'idle' | 'play'>('idle');
   const [order, setOrder] = useState<PlayOrder>('seq');
   const [target, setTarget] = useState<PlayTarget>('all');
@@ -248,20 +250,27 @@ export function CourseScreen({
   const canStart = !empty && !noStarredToPlay;
 
   if (mode === 'play' && run) {
+    // 確認ダイアログはここでも描く。「計測して始める」でドリルへ移る瞬間に
+    // 閉じるアニメーションごと unmount されないよう、両方の枝で繋いでおく。
     return (
-      <CompositionPlayer
-        courseId={course.id}
-        courseTitle={course.title}
-        sequence={run.sequence}
-        startIndex={run.startIndex}
-        intervalSec={intervalSec}
-        onExit={exitPlayer}
-      />
+      <>
+        {studyGuardDialog}
+        <CompositionPlayer
+          courseId={course.id}
+          courseTitle={course.title}
+          sequence={run.sequence}
+          startIndex={run.startIndex}
+          intervalSec={intervalSec}
+          onExit={exitPlayer}
+        />
+      </>
     );
   }
 
   return (
     <div className="space-y-8">
+      {studyGuardDialog}
+
       <header className="space-y-2">
         <Link href="/compositions" className="text-xs text-muted-foreground hover:underline">
           ← 瞬間英作文
@@ -293,7 +302,7 @@ export function CourseScreen({
               <span className="font-mono tabular-nums">{resume.index}</span> /{' '}
               <span className="font-mono tabular-nums">{resume.ids.length}</span> 文まで完了
             </p>
-            <Button size="sm" onClick={startResume} disabled={empty}>
+            <Button size="sm" onClick={() => guard(startResume)} disabled={empty}>
               <RotateCcw className="size-4" />
               続きから
             </Button>
@@ -393,7 +402,7 @@ export function CourseScreen({
           size="lg"
           variant={resume ? 'outline' : 'default'}
           className="w-full"
-          onClick={startFresh}
+          onClick={() => guard(startFresh)}
           disabled={!canStart}
         >
           <Play className="size-5" />

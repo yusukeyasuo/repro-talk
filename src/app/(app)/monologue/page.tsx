@@ -44,6 +44,7 @@ export default async function MonologuePage() {
         topics={(topics ?? []) as MonologueTopic[]}
         phrases={(phrases ?? []) as Phrase[]}
         goalSec={(profile as Profile | null)?.daily_goal_sec ?? 60}
+        running={running}
       />
     </div>
   );

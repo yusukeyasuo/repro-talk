@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { logPractice, updateClip } from '@/app/actions/clips';
 import { saveRecording } from '@/app/actions/recordings';
 import { AnnotationEditor } from '@/components/annotation/annotation-editor';
+import { useStudyGuard } from '@/components/study/study-guard';
 import { YouTubePlayer, type PlayerHandle } from '@/components/player/youtube-player';
 import { ExplainPanel } from '@/components/workspace/explain-panel';
 import { PhrasePanel } from '@/components/workspace/phrase-panel';
@@ -31,7 +32,7 @@ import { createClient } from '@/lib/supabase/client';
 import { splitSentences } from '@/lib/transcript';
 import { formatSeconds } from '@/lib/youtube';
 import { normalizeAnnotations, type Annotation } from '@/types/annotation';
-import type { Clip, Material } from '@/types/database';
+import type { Clip, Material, StudySession } from '@/types/database';
 
 const RATES = [0.5, 0.75, 1] as const;
 
@@ -42,10 +43,13 @@ type Props = {
   /** source='text' のときは動画を持たないので undefined */
   material?: Material;
   userId: string;
+  /** 計測中の学習。練習を始めるときに「計測せずに始めるか」を訊くのに使う */
+  running: StudySession | null;
 };
 
-export function Workspace({ clip, material, userId }: Props) {
+export function Workspace({ clip, material, userId, running }: Props) {
   const isText = clip.source === 'text';
+  const { guard, dialog: studyGuardDialog } = useStudyGuard('reproduction', running);
 
   const playerRef = useRef<PlayerHandle>(null);
   const sentencePlayerRef = useRef<SentencePlayerHandle>(null);
@@ -414,6 +418,8 @@ export function Workspace({ clip, material, userId }: Props) {
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+      {studyGuardDialog}
+
       {/* 左: プレイヤーと録音 */}
       <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
         {isText ? (
@@ -459,10 +465,11 @@ export function Workspace({ clip, material, userId }: Props) {
               onClick={
                 playing
                   ? () => pauseModel()
-                  : () => {
-                      setPendingRep(false);
-                      playModel();
-                    }
+                  : () =>
+                      guard(() => {
+                        setPendingRep(false);
+                        playModel();
+                      })
               }
             >
               {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
@@ -512,7 +519,11 @@ export function Workspace({ clip, material, userId }: Props) {
             <Button
               size="sm"
               variant={recorder.isRecording ? 'destructive' : 'outline'}
-              onClick={toggleRecording}
+              onClick={
+                recorder.isRecording
+                  ? () => void toggleRecording()
+                  : () => guard(() => void toggleRecording())
+              }
               disabled={recorder.state === 'requesting'}
             >
               {recorder.isRecording ? <Square className="size-4" /> : <Mic className="size-4" />}
