@@ -68,11 +68,15 @@ export function TopNav() {
   );
 }
 
+/**
+ * 画面下のナビ。sticky はレイアウト側の入れ物（計測中バーと共有する）が持つので、
+ * ここでは持たない。2つの要素が別々に bottom-0 で貼り付くと重なってしまう。
+ */
 export function BottomNav() {
   const isActive = useActive();
 
   return (
-    <nav className="sticky bottom-0 z-30 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+    <nav className="border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       <ul className="grid grid-cols-7">
         {ITEMS.map(({ href, label, icon: Icon, exact }) => (
           <li key={href}>

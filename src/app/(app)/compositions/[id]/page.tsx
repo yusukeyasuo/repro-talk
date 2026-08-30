@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { CourseScreen } from '@/components/composition/course-screen';
+import { getRunningStudySession } from '@/lib/study-server';
 import { createClient } from '@/lib/supabase/server';
 import type { Composition, CompositionCourse } from '@/types/database';
 
@@ -14,7 +15,7 @@ export default async function CourseDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: course }, { data: comps }] = await Promise.all([
+  const [{ data: course }, { data: comps }, running] = await Promise.all([
     // RLS 越しに読めなければ（＝他人のコース）null になり notFound へ落ちる
     supabase.from('composition_courses').select('*').eq('id', id).maybeSingle(),
     supabase
@@ -23,6 +24,7 @@ export default async function CourseDetailPage({
       .eq('course_id', id)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true }),
+    getRunningStudySession(),
   ]);
 
   if (!course) notFound();
@@ -31,6 +33,7 @@ export default async function CourseDetailPage({
     <CourseScreen
       course={course as CompositionCourse}
       compositions={(comps ?? []) as Composition[]}
+      running={running}
     />
   );
 }

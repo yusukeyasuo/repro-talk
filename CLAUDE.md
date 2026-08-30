@@ -49,7 +49,7 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 ## 主要な構造
 
 ```
-supabase/migrations/     0001 スキーマ+RLS+Storage / 0002 お題30件
+supabase/migrations/     0001 スキーマ+RLS+Storage / 0002 お題30件 / 0008 学習時間の計測
 src/proxy.ts             Supabase セッション更新 + 未ログインを /login へ（旧 middleware.ts）
 src/app/(app)/           認証必須のページ群
 src/app/api/ai/*         Claude API を叩く Route Handler（proxy の matcher 対象外なので各自で認証）
@@ -58,8 +58,11 @@ src/components/player/   YouTube IFrame Player API のラッパ
 src/components/annotation/ 発音マーキング（紙とペンの代替）
 src/components/workspace/  リプロダクション・ワークスペース
 src/components/monologue/  独り言モード
+src/components/study/      学習時間の計測（開始/終了・計測中バー・記録の修正）
 src/lib/ai/              Anthropic クライアント・プロンプト・構造化出力ランナー
 src/lib/activity.ts      連続日数・ヒートマップ（日付境界は Asia/Tokyo 固定）
+src/lib/study.ts         学習時間の純粋ロジック（JST の読み書き・時間の整形）
+src/lib/study-server.ts  学習時間のサーバ読み取り（Server Action に置くと公開される）
 ```
 
 ## Claude API の約束事
@@ -78,6 +81,9 @@ src/lib/activity.ts      連続日数・ヒートマップ（日付境界は Asi
 - **annotations は transcript の文字インデックス参照**。transcript を編集したら、覆っていた部分文字列で新テキストへ貼り直す（`reanchorAnnotations`、`src/lib/annotation-anchor.ts`）。消えた記号だけ落とす。機械的なオフセット追従はしない
 - **AI 解析（annotate）は quote＋occurrence を返させ、サーバ側で文字列照合してオフセットを復元する**（`resolveAiAnnotations`）。LLM は整数オフセットが不安定なので index は信用しない。最後に `normalizeAnnotations()` を最終防波堤として必ず通す
 - リプロダクション回数は「1回再生して止める→**言えた**」のタップで数える（聴くだけ・ループは数えない）。**独り言の録音音声は保存しない**（時間だけ記録）。フレーズは**初回使用で卒業**して「今日使うフレーズ」から外れる
+- **学習時間の経過はカウンタを持たず、`started_at` と今の差で毎回計算する**。ページ遷移・リロード・アプリの切り替えを跨いでも狂わない。計測中は同時に1本だけ（部分ユニーク索引で担保）で、別の学習を開始すると前の1本を閉じてから始める。計測中バーは `(app)` レイアウトが持ち、下部ナビと**同じ入れ物**で貼り付ける（2つの要素を別々に `sticky bottom-0` にすると重なる）
+- **終了ボタンを押し忘れた行は 0分 で締めて印（`auto_closed`）を付ける**。それらしい時間を作らない。`study_sessions.duration_sec` は生成列なので、あとから直すときは時刻のほうを動かす（「開始19:00・終了19:30・45分」のような矛盾した行を作れない）。**`study_sec` と `monologue_sec` は同じ時間が重なる**ので、表示でも集計でも足し合わせない（ヒートマップの分の項は大きいほうだけを採る）
+- **`'use server'` のファイルに読み取りを置かない**。export がすべて公開エンドポイントになる。サーバコンポーネント専用の読み取りは `src/lib/*-server.ts` に置く
 - **iOS Safari の MediaRecorder は `audio/mp4`**。`isTypeSupported` で分岐済み。`audio/webm` 決め打ちにしない
 - **バックグラウンド録音は不可**。「1人電話」は Wake Lock で画面を保つ前提
 - **YouTube IFrame の `end` はループしない**。`requestAnimationFrame` で終端を監視して `seekTo`

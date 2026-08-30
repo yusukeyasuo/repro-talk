@@ -1,14 +1,17 @@
-import { ArrowRight, Flame, Mic, Repeat2, Zap } from 'lucide-react';
+import { ArrowRight, Flame, Mic, Repeat2, Timer, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { Heatmap } from '@/components/dashboard/heatmap';
+import { StudyLog } from '@/components/study/study-log';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { buildHeatmap, calcStreak, hasActivity, shiftDate, todayJst } from '@/lib/activity';
+import { formatDurationHm, jstDateOf } from '@/lib/study';
+import { getRecentStudySessions } from '@/lib/study-server';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { formatDurationJa } from '@/lib/youtube';
-import type { Clip, DailyActivity, Profile } from '@/types/database';
+import type { Clip, DailyActivity, Profile, StudyKind } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,21 +23,27 @@ export default async function DashboardPage() {
   const since = shiftDate(today, -120);
   const supabase = await createClient();
 
-  const [{ data: activity }, { data: profile }, { data: recentClips }, { count: phraseCount }] =
-    await Promise.all([
-      supabase
-        .from('daily_activity')
-        .select('*')
-        .gte('activity_date', since)
-        .order('activity_date', { ascending: false }),
-      supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
-      supabase
-        .from('clips')
-        .select('id, label, transcript, annotations, material_id')
-        .order('updated_at', { ascending: false })
-        .limit(10),
-      supabase.from('phrases').select('id', { count: 'exact', head: true }).is('graduated_at', null),
-    ]);
+  const [
+    { data: activity },
+    { data: profile },
+    { data: recentClips },
+    { count: phraseCount },
+    studySessions,
+  ] = await Promise.all([
+    supabase
+      .from('daily_activity')
+      .select('*')
+      .gte('activity_date', since)
+      .order('activity_date', { ascending: false }),
+    supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+    supabase
+      .from('clips')
+      .select('id, label, transcript, annotations, material_id')
+      .order('updated_at', { ascending: false })
+      .limit(10),
+    supabase.from('phrases').select('id', { count: 'exact', head: true }).is('graduated_at', null),
+    getRecentStudySessions(14),
+  ]);
 
   const rows = (activity ?? []) as DailyActivity[];
   const byDate = new Map(rows.map((row) => [row.activity_date, row]));
@@ -47,6 +56,19 @@ export default async function DashboardPage() {
   const weekMonologueSec = weekRows.reduce((sum, row) => sum + row.monologue_sec, 0);
   const weekReps = weekRows.reduce((sum, row) => sum + row.reproduction_reps, 0);
   const weekCompositionReps = weekRows.reduce((sum, row) => sum + row.composition_reps, 0);
+  const weekStudySec = weekRows.reduce((sum, row) => sum + row.study_sec, 0);
+
+  // 今日の学習時間を導線ごとに出す（daily_activity は種類をまとめてしまうので明細から数える）
+  const todayStudySec: Record<StudyKind, number> = {
+    reproduction: 0,
+    monologue: 0,
+    composition: 0,
+  };
+  for (const session of studySessions) {
+    if (jstDateOf(session.started_at) === today) {
+      todayStudySec[session.kind] += session.duration_sec;
+    }
+  }
 
   const why = (profile as Profile | null)?.why_text;
   const goalSec = (profile as Profile | null)?.daily_goal_sec ?? 60;
@@ -107,6 +129,9 @@ export default async function DashboardPage() {
               完成された英語を 100 のまま受け取る。1文再生 → 止める → 同じように言う。
             </p>
             <p className="mt-2 line-clamp-1 text-sm">{reproLabel}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              今日の学習 {formatDurationHm(todayStudySec.reproduction)}
+            </p>
           </Link>
 
           <Link
@@ -125,6 +150,9 @@ export default async function DashboardPage() {
               今日 {formatDurationJa(todayRow?.monologue_sec ?? 0)} / 目標{' '}
               {formatDurationJa(goalSec)}
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              今日の学習 {formatDurationHm(todayStudySec.monologue)}
+            </p>
           </Link>
 
           <Link
@@ -142,6 +170,9 @@ export default async function DashboardPage() {
             <p className="mt-2 text-sm">
               今日 <span className="font-mono tabular-nums">{todayCompositionReps}</span> 回
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              今日の学習 {formatDurationHm(todayStudySec.composition)}
+            </p>
           </Link>
         </div>
       </section>
@@ -149,7 +180,7 @@ export default async function DashboardPage() {
       {/* 記録 */}
       <section className="space-y-4">
         <h2 className="text-sm font-medium">続いている記録</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-xl border p-4">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Flame className="size-3.5" />
@@ -158,6 +189,13 @@ export default async function DashboardPage() {
             <p className="mt-1 text-2xl">
               <span className="font-mono tabular-nums">{streak}</span> 日
             </p>
+          </div>
+          <div className="rounded-xl border p-4">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Timer className="size-3.5" />
+              今週の学習時間
+            </p>
+            <p className="mt-1 text-2xl">{formatDurationHm(weekStudySec)}</p>
           </div>
           <div className="rounded-xl border p-4">
             <p className="text-xs text-muted-foreground">今週の独り言</p>
@@ -185,6 +223,15 @@ export default async function DashboardPage() {
               : '1分でいい。始めることが全部のスタートです。'}
           </p>
         </div>
+      </section>
+
+      {/* 学習時間の明細。終了ボタンの押し忘れはここで直す。 */}
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-medium">学習の記録</h2>
+          <p className="text-xs text-muted-foreground">直近14日</p>
+        </div>
+        <StudyLog sessions={studySessions} today={today} />
       </section>
 
       {(phraseCount ?? 0) > 0 && (

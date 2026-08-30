@@ -3,6 +3,8 @@ import type { Annotation } from './annotation';
 export type MaterialLevel = 1 | 2 | 3 | 4;
 export type RecordingKind = 'reproduction' | 'monologue';
 export type MonologueMode = 'phone' | 'free';
+/** 学習時間を計測する3本の導線。瞬間英作文も1本として数える。 */
+export type StudyKind = 'reproduction' | 'monologue' | 'composition';
 
 /** AI が返す「言えなかったこと」への英語表現候補 */
 export type AiSuggestion = {
@@ -140,6 +142,22 @@ export type CompositionLog = {
   practiced_at: string;
 };
 
+/**
+ * 学習時間の計測1回分。ended_at が NULL なら計測中（1ユーザーに同時1本）。
+ * duration_sec は started_at / ended_at からの生成列なので書き込まない。
+ */
+export type StudySession = {
+  id: string;
+  user_id: string;
+  kind: StudyKind;
+  started_at: string;
+  ended_at: string | null;
+  duration_sec: number;
+  /** 押し忘れをアプリが締めた行。本人が直すまで「終了し忘れ」として出す。 */
+  auto_closed: boolean;
+  adjusted_at: string | null;
+} & Timestamps;
+
 export type DailyActivity = {
   user_id: string;
   activity_date: string;
@@ -147,6 +165,8 @@ export type DailyActivity = {
   monologue_sec: number;
   recording_sec: number;
   composition_reps: number;
+  /** 学習していた時間。monologue_sec（声を出していた時間）と重なるので足し合わせない。 */
+  study_sec: number;
 };
 
 /** Insert 時に省略できる列 */
@@ -204,6 +224,17 @@ export type Database = {
       >;
       compositions: Table<Composition, 'id' | 'sort_order' | 'starred' | 'created_at' | 'updated_at'>;
       composition_logs: Table<CompositionLog, 'id' | 'course_id' | 'rep_count' | 'practiced_at'>;
+      // duration_sec は生成列。Insert / Update に含めると Postgres が拒否するので渡さない。
+      study_sessions: Table<
+        StudySession,
+        | 'id'
+        | 'started_at'
+        | 'ended_at'
+        | 'duration_sec'
+        | 'auto_closed'
+        | 'adjusted_at'
+        | 'created_at'
+      >;
     };
     Views: {
       daily_activity: {

@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
+import { StudyStarter } from '@/components/study/study-starter';
 import { Workspace } from '@/components/workspace/workspace';
+import { getRunningStudySession } from '@/lib/study-server';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import type { Clip, Material } from '@/types/database';
 
@@ -13,7 +15,10 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
   if (!user) redirect('/login');
 
   const supabase = await createClient();
-  const { data: clip } = await supabase.from('clips').select('*').eq('id', id).maybeSingle();
+  const [{ data: clip }, running] = await Promise.all([
+    supabase.from('clips').select('*').eq('id', id).maybeSingle(),
+    getRunningStudySession(),
+  ]);
   if (!clip) notFound();
 
   const typedClip = clip as Clip;
@@ -43,6 +48,8 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
           {typedClip.label || 'リプロダクション'}
         </h1>
       </header>
+
+      <StudyStarter kind="reproduction" running={running} />
 
       <Workspace clip={typedClip} material={material ?? undefined} userId={user.id} />
     </div>

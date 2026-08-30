@@ -18,7 +18,8 @@ export function hasActivity(row: DailyActivity | undefined): boolean {
     row.reproduction_reps > 0 ||
     row.monologue_sec > 0 ||
     row.recording_sec > 0 ||
-    row.composition_reps > 0
+    row.composition_reps > 0 ||
+    row.study_sec > 0
   );
 }
 
@@ -44,6 +45,7 @@ export type HeatmapCell = {
   reps: number;
   monologueSec: number;
   compositionReps: number;
+  studySec: number;
 };
 
 /** 直近 weeks 週ぶんのセル（日曜始まりの列） */
@@ -66,12 +68,15 @@ export function buildHeatmap(
     for (let day = 0; day < 7; day += 1) {
       const date = shiftDate(firstSunday, w * 7 + day);
       const row = byDate.get(date);
-      // 1rep ≈ 独り言1分 ≈ 瞬間英作文1文 で合算した1次元スコア。rep は「言えた」タップ
+      // 1rep ≈ 1分 ≈ 瞬間英作文1文 で合算した1次元スコア。rep は「言えた」タップ
       // （意図的な再現）なので再生カウントより希少。実データで再調整する前提の暫定境界。
-      const score =
-        (row?.reproduction_reps ?? 0) +
-        Math.round((row?.monologue_sec ?? 0) / 60) +
-        (row?.composition_reps ?? 0);
+      //
+      // 分の項は「学習時間」と「独り言の話した時間」の**大きいほう**だけを採る。
+      // 独り言も学習時間の計測に乗るので、足すと同じ時間を二重に濃くしてしまう。
+      const minutes = Math.round(
+        Math.max(row?.study_sec ?? 0, row?.monologue_sec ?? 0) / 60,
+      );
+      const score = (row?.reproduction_reps ?? 0) + minutes + (row?.composition_reps ?? 0);
       const level: HeatmapCell['level'] =
         score === 0 ? 0 : score < 2 ? 1 : score < 5 ? 2 : score < 12 ? 3 : 4;
       column.push({
@@ -80,6 +85,7 @@ export function buildHeatmap(
         reps: row?.reproduction_reps ?? 0,
         monologueSec: row?.monologue_sec ?? 0,
         compositionReps: row?.composition_reps ?? 0,
+        studySec: row?.study_sec ?? 0,
       });
     }
     columns.push(column);

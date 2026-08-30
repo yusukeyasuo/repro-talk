@@ -6,6 +6,15 @@ import { parseCompositionsCsv } from '../src/lib/composition-csv.ts';
 import { ttsCacheKey } from '../src/lib/tts-cache.ts';
 import { isLocalSupabase, localMailboxUrl } from '../src/lib/local-dev.ts';
 import {
+  elapsedSec,
+  endedAtFrom,
+  formatClock,
+  formatDurationHm,
+  jstDateOf,
+  jstIsoFrom,
+  jstTimeOf,
+} from '../src/lib/study.ts';
+import {
   cleanTranscript,
   parseLeadingTimestampSeconds,
   splitSentences,
@@ -250,6 +259,7 @@ describe('activity: 連続日数とヒートマップ', () => {
     monologue_sec: 0,
     recording_sec: 0,
     composition_reps: 0,
+    study_sec: 0,
   });
 
   const compositionRow = (activity_date: string, compositionReps = 1): DailyActivity => ({
@@ -259,6 +269,17 @@ describe('activity: 連続日数とヒートマップ', () => {
     monologue_sec: 0,
     recording_sec: 0,
     composition_reps: compositionReps,
+    study_sec: 0,
+  });
+
+  const studyRow = (activity_date: string, studySec: number, monologueSec = 0): DailyActivity => ({
+    user_id: 'u',
+    activity_date,
+    reproduction_reps: 0,
+    monologue_sec: monologueSec,
+    recording_sec: 0,
+    composition_reps: 0,
+    study_sec: studySec,
   });
 
   it('日付の加減算が月・年をまたぐ', () => {
@@ -309,6 +330,81 @@ describe('activity: 連続日数とヒートマップ', () => {
     assert.ok(today);
     assert.equal(today.level, 4);
     assert.equal(today.compositionReps, 30);
+  });
+
+  it('学習時間だけの日も連続日数に数える', () => {
+    assert.equal(
+      calcStreak([studyRow('2026-08-01', 600), studyRow('2026-07-31', 600)], '2026-08-01'),
+      2,
+    );
+  });
+
+  it('学習時間と独り言の時間は二重に濃くしない（大きいほうだけを採る）', () => {
+    // 学習20分・そのうち独り言15分。足すと 35 だが、採るのは 20。
+    const cell = (rows: DailyActivity[]) =>
+      buildHeatmap(rows, 12, '2026-08-01')
+        .at(-1)
+        ?.find((c) => c.date === '2026-08-01');
+
+    const both = cell([studyRow('2026-08-01', 20 * 60, 15 * 60)]);
+    const studyOnly = cell([studyRow('2026-08-01', 20 * 60)]);
+    assert.ok(both && studyOnly);
+    assert.equal(both.level, studyOnly.level);
+    assert.equal(both.studySec, 20 * 60);
+  });
+});
+
+describe('study: 学習時間の計測', () => {
+  it('経過時間は開始時刻と今の差（カウンタを持たないのでリロードで狂わない）', () => {
+    const started = '2026-08-29T12:00:00.000Z';
+    assert.equal(elapsedSec(started, Date.parse('2026-08-29T12:25:30.000Z')), 25 * 60 + 30);
+    // 端末の時計が巻き戻っても負にはしない
+    assert.equal(elapsedSec(started, Date.parse('2026-08-29T11:59:00.000Z')), 0);
+    assert.equal(elapsedSec('not a date'), 0);
+  });
+
+  it('計測中の時計は1時間を超えたら h:mm:ss になる', () => {
+    assert.equal(formatClock(0), '00:00');
+    assert.equal(formatClock(65), '01:05');
+    assert.equal(formatClock(3600), '1:00:00');
+    assert.equal(formatClock(3661), '1:01:01');
+  });
+
+  it('学習時間の表示は「1時間35分」形式。0でない1分未満は切り捨てない', () => {
+    assert.equal(formatDurationHm(0), '0分');
+    assert.equal(formatDurationHm(30), '1分未満');
+    assert.equal(formatDurationHm(60), '1分');
+    assert.equal(formatDurationHm(35 * 60), '35分');
+    assert.equal(formatDurationHm(3600), '1時間');
+    assert.equal(formatDurationHm(3600 + 35 * 60), '1時間35分');
+  });
+
+  it('日付・時刻は端末のタイムゾーンに依らず JST で読む', () => {
+    // UTC 2026-08-29 15:30 は JST では翌日 00:30
+    assert.equal(jstDateOf('2026-08-29T15:30:00.000Z'), '2026-08-30');
+    assert.equal(jstTimeOf('2026-08-29T15:30:00.000Z'), '00:30');
+    assert.equal(jstTimeOf('2026-08-29T00:05:00.000Z'), '09:05');
+  });
+
+  it('JST の日付＋時刻から ISO を作る（+09:00 を明示して解釈する）', () => {
+    assert.equal(jstIsoFrom('2026-08-29', '21:00'), '2026-08-29T12:00:00.000Z');
+    assert.equal(jstIsoFrom('2026-08-29', '00:30'), '2026-08-28T15:30:00.000Z');
+    assert.equal(jstIsoFrom('2026/08/29', '21:00'), null);
+    assert.equal(jstIsoFrom('2026-08-29', '9:00'), null);
+  });
+
+  it('あとから直すときは「開始 + 時間」で終了時刻を作り直す', () => {
+    assert.equal(
+      endedAtFrom('2026-08-29T12:00:00.000Z', 35 * 60),
+      '2026-08-29T12:35:00.000Z',
+    );
+    // 上限（12時間）を超える入力は丸める。誤入力で連続日数を壊さない
+    assert.equal(
+      endedAtFrom('2026-08-29T12:00:00.000Z', 99 * 3600),
+      '2026-08-30T00:00:00.000Z',
+    );
+    assert.equal(endedAtFrom('2026-08-29T12:00:00.000Z', -60), '2026-08-29T12:00:00.000Z');
+    assert.equal(endedAtFrom('not a date', 60), null);
   });
 });
 
