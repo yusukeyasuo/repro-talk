@@ -18,17 +18,20 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
+import { useStudyGuard } from '@/components/study/study-guard';
 import { Textarea } from '@/components/ui/textarea';
 import { useRecorder } from '@/hooks/use-recorder';
 import { useWakeLock } from '@/hooks/use-wake-lock';
 import { cn } from '@/lib/utils';
 import { formatDurationJa } from '@/lib/youtube';
-import type { AiSuggestion, MonologueTopic, Phrase } from '@/types/database';
+import type { AiSuggestion, MonologueTopic, Phrase, StudySession } from '@/types/database';
 
 type Props = {
   topics: MonologueTopic[];
   phrases: Phrase[];
   goalSec: number;
+  /** 計測中の学習。1人電話を始めるときに「計測せずに始めるか」を訊くのに使う */
+  running: StudySession | null;
 };
 
 /** 日付ベースで今日のお題を決める（1日1個で1ヶ月まわる）。 */
@@ -41,10 +44,11 @@ function todayIndex(length: number) {
   return days % length;
 }
 
-export function MonologueSession({ topics, phrases, goalSec }: Props) {
+export function MonologueSession({ topics, phrases, goalSec, running }: Props) {
   const router = useRouter();
   const recorder = useRecorder();
   const wakeLock = useWakeLock();
+  const { guard, dialog: studyGuardDialog } = useStudyGuard('monologue', running);
 
   const [topicIndex, setTopicIndex] = useState(() => todayIndex(topics.length));
   const [usedPhraseIds, setUsedPhraseIds] = useState<Set<string>>(new Set());
@@ -155,6 +159,8 @@ export function MonologueSession({ topics, phrases, goalSec }: Props) {
 
   return (
     <div className="space-y-6">
+      {studyGuardDialog}
+
       {/* お題 */}
       <section className="rounded-xl border p-5">
         <div className="flex items-start justify-between gap-3">
@@ -204,7 +210,7 @@ export function MonologueSession({ topics, phrases, goalSec }: Props) {
             size="lg"
             variant={recorder.isRecording ? 'destructive' : 'default'}
             className="h-16 w-full rounded-full text-base"
-            onClick={recorder.isRecording ? stop : start}
+            onClick={recorder.isRecording ? stop : () => guard(() => void start())}
             disabled={recorder.state === 'requesting' || saving}
           >
             {saving ? (

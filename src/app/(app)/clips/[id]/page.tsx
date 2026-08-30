@@ -51,7 +51,12 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
 
       <StudyStarter kind="reproduction" running={running} />
 
-      <Workspace clip={typedClip} material={material ?? undefined} userId={user.id} />
+      <Workspace
+        clip={typedClip}
+        material={material ?? undefined}
+        userId={user.id}
+        running={running}
+      />
     </div>
   );
 }
