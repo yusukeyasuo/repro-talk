@@ -11,6 +11,7 @@ import {
   importCustomTopics,
   updateCustomTopic,
 } from '@/app/actions/monologue';
+import { SuggestTopicsDialog } from '@/components/monologue/suggest-topics-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -40,16 +41,19 @@ export function TopicManager({
       <AddTopicForm />
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-medium">
             自分のお題 <span className="font-mono tabular-nums">{own.length}</span> 件
           </h2>
-          <ImportTopicsDialog />
+          <div className="flex flex-wrap items-center gap-2">
+            <SuggestTopicsDialog />
+            <ImportTopicsDialog />
+          </div>
         </div>
 
         {own.length === 0 ? (
           <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            まだありません。上のフォームか、貼り付けでの一括登録から足すと、独り言のお題に混ざります。
+            まだありません。上のフォーム・AIの提案・貼り付けでの一括登録のどれかから足すと、独り言のお題に混ざります。
           </p>
         ) : (
           <ul className="space-y-2">
