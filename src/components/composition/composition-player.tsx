@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  BookOpen,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -15,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { logCompositionReps, updateComposition } from '@/app/actions/compositions';
+import { GrammarPanel } from '@/components/composition/grammar-panel';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useWakeLock } from '@/hooks/use-wake-lock';
@@ -65,6 +67,8 @@ export function CompositionPlayer({
   const [finished, setFinished] = useState(false);
   const [doneThisRound, setDoneThisRound] = useState(0);
   const [paused, setPaused] = useState(false);
+  // 文法解説の面を被せているか。開くと必ず一時停止するので、読んでいる間に次へ送られない。
+  const [grammarOpen, setGrammarOpen] = useState(false);
   // ★（重点マーク）の楽観状態。ドリル中に「言えなかった」文へその場で付け外しできる。
   // 退出時の router.refresh（CourseScreen 側）でサーバ値へ寄せ直る。
   const [starredIds, setStarredIds] = useState<Set<string>>(
@@ -253,6 +257,21 @@ export function CompositionPlayer({
   function togglePause() {
     if (paused) resume();
     else pause();
+  }
+
+  // 文法解説を開く。必ず先に止める（読んでいる 20〜30秒のあいだに次の文へ送られてしまう）。
+  // pause は Wake Lock を手放すが、解説はしばらく読むものなので取り直して画面を点けておく。
+  function openGrammar() {
+    if (!pausedRef.current) pause();
+    void requestWakeLock();
+    setGrammarOpen(true);
+  }
+
+  // 閉じても再開はしない。読み終えた直後に読み上げが走ると面食らうので、
+  // 再開は本人のタップ（「タップで再開」）に委ねる。止まったままなので画面も手放す。
+  function closeGrammar() {
+    setGrammarOpen(false);
+    if (pausedRef.current) void releaseWakeLock();
   }
 
   // ★のトグル。ヘッダーに置くので全画面タップ（次へ）とは別の当たり判定。
@@ -486,7 +505,9 @@ export function CompositionPlayer({
       {!finished && (
         <div className="flex flex-col gap-2 border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <p className="text-center text-xs text-muted-foreground sm:text-left">
-            答えは自動で読み上げます・画面の真ん中をタップで一時停止
+            {revealed
+              ? '腑に落ちなければ本のアイコンで止めて文法解説'
+              : '答えは自動で読み上げます・画面の真ん中をタップで一時停止'}
           </p>
           {/* 歩きながら片手で押せるよう、スマホでは全幅＋高さを取る */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -500,6 +521,19 @@ export function CompositionPlayer({
               className="size-14 shrink-0 rounded-full sm:size-10 sm:rounded-lg"
             >
               <ChevronLeft className="size-5" />
+            </Button>
+            {/* 答えを見てからでないと押せない（見る前に解説を読むと、自力で作る練習にならない）。
+                隠さず disabled で置いて、そういうボタンがあること自体は分かるようにする。 */}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={openGrammar}
+              disabled={!revealed}
+              aria-label="この文の文法解説を見る"
+              title="止めて文法解説を見る（答えを見たあとに使えます）"
+              className="size-14 shrink-0 rounded-full sm:size-10 sm:rounded-lg"
+            >
+              <BookOpen className="size-5" />
             </Button>
             <Button
               size="lg"
@@ -520,6 +554,11 @@ export function CompositionPlayer({
             </Button>
           </div>
         </div>
+      )}
+
+      {/* 文法解説。プレイヤー全体を覆うので、開いているあいだは送り・★・終了に触れない。 */}
+      {grammarOpen && current && (
+        <GrammarPanel ja={current.ja} en={current.en} onClose={closeGrammar} />
       )}
     </div>
   );
