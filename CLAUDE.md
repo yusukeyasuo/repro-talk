@@ -49,7 +49,7 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 ## 主要な構造
 
 ```
-supabase/migrations/     0001 スキーマ+RLS+Storage / 0002 お題30件 / 0008 学習時間の計測
+supabase/migrations/     0001 スキーマ+RLS+Storage / 0002 お題30件 / 0008 学習時間の計測 / 0009 週の目標
 src/proxy.ts             Supabase セッション更新 + 未ログインを /login へ（旧 middleware.ts）
 src/app/(app)/           認証必須のページ群
 src/app/api/ai/*         Claude API を叩く Route Handler（proxy の matcher 対象外なので各自で認証）
@@ -60,7 +60,7 @@ src/components/workspace/  リプロダクション・ワークスペース
 src/components/monologue/  独り言モード
 src/components/study/      学習時間の計測（開始/終了・計測中バー・記録の修正）
 src/lib/ai/              Anthropic クライアント・プロンプト・構造化出力ランナー
-src/lib/activity.ts      連続日数・ヒートマップ（日付境界は Asia/Tokyo 固定）
+src/lib/activity.ts      連続日数・ヒートマップ・週の目標（日付境界は Asia/Tokyo 固定）
 src/lib/study.ts         学習時間の純粋ロジック（JST の読み書き・時間の整形）
 src/lib/study-server.ts  学習時間のサーバ読み取り（Server Action に置くと公開される）
 ```
@@ -84,6 +84,7 @@ src/lib/study-server.ts  学習時間のサーバ読み取り（Server Action �
 - **学習時間の経過はカウンタを持たず、`started_at` と今の差で毎回計算する**。ページ遷移・リロード・アプリの切り替えを跨いでも狂わない。計測中は同時に1本だけ（部分ユニーク索引で担保）で、別の学習を開始すると前の1本を閉じてから始める。計測中バーは `(app)` レイアウトが持ち、下部ナビと**同じ入れ物**で貼り付ける（2つの要素を別々に `sticky bottom-0` にすると重なる）
 - **終了ボタンを押し忘れた行は 0分 で締めて印（`auto_closed`）を付ける**。それらしい時間を作らない。`study_sessions.duration_sec` は生成列なので、あとから直すときは時刻のほうを動かす（「開始19:00・終了19:30・45分」のような矛盾した行を作れない）。**`study_sec` と `monologue_sec` は同じ時間が重なる**ので、表示でも集計でも足し合わせない（ヒートマップの分の項は大きいほうだけを採る）
 - **`'use server'` のファイルに読み取りを置かない**。export がすべて公開エンドポイントになる。サーバコンポーネント専用の読み取りは `src/lib/*-server.ts` に置く
+- **ホームの「今週」は月曜始まりの暦週で統一する**（`weekStartJst()`）。目標のためにローリング7日と混ぜると、同じ画面で「今週」が2つの意味になり、達成率も日が進むだけで目減りする。**`profiles.weekly_goal_sec` の 0 は未設定**で、既定値を置かない（本人が決めていない数字に対して未達を出し続けない）。`daily_goal_sec`（1日の独り言＝声を出す時間）とは別の軸なので列を分ける
 - **iOS Safari の MediaRecorder は `audio/mp4`**。`isTypeSupported` で分岐済み。`audio/webm` 決め打ちにしない
 - **バックグラウンド録音は不可**。「1人電話」は Wake Lock で画面を保つ前提
 - **YouTube IFrame の `end` はループしない**。`requestAnimationFrame` で終端を監視して `seekTo`

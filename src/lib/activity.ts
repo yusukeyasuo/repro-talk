@@ -12,6 +12,16 @@ export function shiftDate(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * その日を含む週（**月曜始まり**）の月曜日。
+ * ホームの「今週」はすべてこれを起点にする（ローリング7日と混ぜない）。
+ */
+export function weekStartJst(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=日 … 6=土
+  return shiftDate(isoDate, -((dow + 6) % 7));
+}
+
 export function hasActivity(row: DailyActivity | undefined): boolean {
   if (!row) return false;
   return (
@@ -37,6 +47,89 @@ export function calcStreak(rows: DailyActivity[], today = todayJst()): number {
     cursor = shiftDate(cursor, -1);
   }
   return streak;
+}
+
+const WEEKDAY_LABELS = ['月', '火', '水', '木', '金', '土', '日'];
+
+export type WeeklyGoalDay = {
+  date: string;
+  /** 月〜日 */
+  label: string;
+  studySec: number;
+  isToday: boolean;
+  /** まだ来ていない日。棒グラフで薄く出す */
+  isFuture: boolean;
+};
+
+export type WeeklyGoalSummary = {
+  weekStart: string;
+  weekEnd: string;
+  goalSec: number;
+  studySec: number;
+  /** 0〜1。100%を超えても頭打ちにしない（超過を見せる） */
+  ratio: number;
+  achieved: boolean;
+  remainingSec: number;
+  /** 今日を含む残り日数 */
+  remainingDays: number;
+  /** 残りを残り日数で割った1日あたり。残り0日なら0 */
+  perDaySec: number;
+  /** 今日の終わりまでに到達しているべき量（ペース） */
+  paceSec: number;
+  /** ペースに対して足りていないか */
+  behind: boolean;
+  days: WeeklyGoalDay[];
+};
+
+/**
+ * 週の学習目標の進捗。表示に必要な値をここで全部出しておき、
+ * コンポーネント側では計算しない（曜日境界の計算を1か所に閉じる）。
+ *
+ * ペースは「今日の終わりまでに `目標 × 経過日数/7`」。
+ * 週の途中で「遅れているのか」を判断できるようにするためで、罰ではない。
+ */
+export function summarizeWeeklyGoal(
+  rows: DailyActivity[],
+  goalSec: number,
+  today = todayJst(),
+): WeeklyGoalSummary {
+  const weekStart = weekStartJst(today);
+  const weekEnd = shiftDate(weekStart, 6);
+  const byDate = new Map(rows.map((row) => [row.activity_date, row]));
+
+  const days: WeeklyGoalDay[] = [];
+  for (let i = 0; i < 7; i += 1) {
+    const date = shiftDate(weekStart, i);
+    days.push({
+      date,
+      label: WEEKDAY_LABELS[i],
+      studySec: byDate.get(date)?.study_sec ?? 0,
+      isToday: date === today,
+      isFuture: date > today,
+    });
+  }
+
+  const studySec = days.reduce((sum, day) => sum + day.studySec, 0);
+  // 今日が週の何日目か（月曜=1）。今日が週外になることは無いが、念のため 1〜7 に丸める
+  const elapsedDays = Math.min(7, Math.max(1, days.findIndex((day) => day.isToday) + 1 || 7));
+  const remainingDays = 7 - elapsedDays + 1;
+  const remainingSec = Math.max(0, goalSec - studySec);
+  const paceSec = Math.round((goalSec * elapsedDays) / 7);
+
+  return {
+    weekStart,
+    weekEnd,
+    goalSec,
+    studySec,
+    ratio: goalSec > 0 ? studySec / goalSec : 0,
+    achieved: goalSec > 0 && studySec >= goalSec,
+    remainingSec,
+    remainingDays,
+    perDaySec: remainingDays > 0 ? Math.round(remainingSec / remainingDays) : 0,
+    paceSec,
+    behind: goalSec > 0 && studySec < paceSec,
+    days,
+  };
 }
 
 export type HeatmapCell = {

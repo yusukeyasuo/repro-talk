@@ -11,6 +11,8 @@ export async function updateProfile(input: {
   /** 「英語の先に理解したい何か」。継続の芯なので常時表示する。 */
   whyText?: string | null;
   dailyGoalSec?: number;
+  /** 週の学習目標秒数。0 は未設定（目標を外す） */
+  weeklyGoalSec?: number;
 }): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) return AUTH_REQUIRED;
@@ -20,6 +22,10 @@ export async function updateProfile(input: {
   if (input.whyText !== undefined) patch.why_text = input.whyText;
   if (input.dailyGoalSec !== undefined) {
     patch.daily_goal_sec = Math.max(30, Math.round(input.dailyGoalSec));
+  }
+  if (input.weeklyGoalSec !== undefined) {
+    // 上限は 7日 × 12時間（study_sessions の1本あたりの上限と揃える）
+    patch.weekly_goal_sec = Math.min(7 * 12 * 3600, Math.max(0, Math.round(input.weeklyGoalSec)));
   }
   if (Object.keys(patch).length === 0) return { ok: true, data: undefined };
 

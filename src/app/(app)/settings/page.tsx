@@ -24,6 +24,7 @@ export default async function SettingsPage() {
       <SettingsForm
         whyText={profile?.why_text ?? ''}
         dailyGoalSec={profile?.daily_goal_sec ?? 60}
+        weeklyGoalSec={profile?.weekly_goal_sec ?? 0}
       />
     </div>
   );

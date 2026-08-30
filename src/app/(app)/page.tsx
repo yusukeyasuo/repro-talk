@@ -1,12 +1,20 @@
-import { ArrowRight, Flame, Mic, Repeat2, Timer, Zap } from 'lucide-react';
+import { ArrowRight, Flame, Mic, Repeat2, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { Heatmap } from '@/components/dashboard/heatmap';
+import { WeeklyGoal, WeeklyGoalPrompt } from '@/components/dashboard/weekly-goal';
 import { StudyLog } from '@/components/study/study-log';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { buildHeatmap, calcStreak, hasActivity, shiftDate, todayJst } from '@/lib/activity';
+import {
+  buildHeatmap,
+  calcStreak,
+  hasActivity,
+  shiftDate,
+  summarizeWeeklyGoal,
+  todayJst,
+} from '@/lib/activity';
 import { formatDurationHm, jstDateOf } from '@/lib/study';
 import { getRecentStudySessions } from '@/lib/study-server';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
@@ -51,12 +59,19 @@ export default async function DashboardPage() {
   const streak = calcStreak(rows, today);
   const heatmap = buildHeatmap(rows, 12, today);
 
-  const weekStart = shiftDate(today, -6);
-  const weekRows = rows.filter((row) => row.activity_date >= weekStart);
+  const why = (profile as Profile | null)?.why_text;
+  const goalSec = (profile as Profile | null)?.daily_goal_sec ?? 60;
+  const weeklyGoalSec = (profile as Profile | null)?.weekly_goal_sec ?? 0;
+
+  // 「今週」は月曜始まりの暦週。目標の区切りと画面内の集計をすべてこれに揃える
+  // （ローリング7日と混ぜると、同じ画面で「今週」が2つの意味になる）。
+  const weekly = summarizeWeeklyGoal(rows, weeklyGoalSec, today);
+  const weekRows = rows.filter(
+    (row) => row.activity_date >= weekly.weekStart && row.activity_date <= weekly.weekEnd,
+  );
   const weekMonologueSec = weekRows.reduce((sum, row) => sum + row.monologue_sec, 0);
   const weekReps = weekRows.reduce((sum, row) => sum + row.reproduction_reps, 0);
   const weekCompositionReps = weekRows.reduce((sum, row) => sum + row.composition_reps, 0);
-  const weekStudySec = weekRows.reduce((sum, row) => sum + row.study_sec, 0);
 
   // 今日の学習時間を導線ごとに出す（daily_activity は種類をまとめてしまうので明細から数える）
   const todayStudySec: Record<StudyKind, number> = {
@@ -69,9 +84,6 @@ export default async function DashboardPage() {
       todayStudySec[session.kind] += session.duration_sec;
     }
   }
-
-  const why = (profile as Profile | null)?.why_text;
-  const goalSec = (profile as Profile | null)?.daily_goal_sec ?? 60;
 
   const recent = (recentClips ?? []) as Pick<
     Clip,
@@ -177,10 +189,17 @@ export default async function DashboardPage() {
         </div>
       </section>
 
+      {/* 週の目標。学習時間そのものはここが持つ（下の「今週の…」は回数・話した時間） */}
+      {weeklyGoalSec > 0 ? (
+        <WeeklyGoal summary={weekly} />
+      ) : (
+        <WeeklyGoalPrompt studySec={weekly.studySec} />
+      )}
+
       {/* 記録 */}
       <section className="space-y-4">
         <h2 className="text-sm font-medium">続いている記録</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border p-4">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Flame className="size-3.5" />
@@ -189,13 +208,6 @@ export default async function DashboardPage() {
             <p className="mt-1 text-2xl">
               <span className="font-mono tabular-nums">{streak}</span> 日
             </p>
-          </div>
-          <div className="rounded-xl border p-4">
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Timer className="size-3.5" />
-              今週の学習時間
-            </p>
-            <p className="mt-1 text-2xl">{formatDurationHm(weekStudySec)}</p>
           </div>
           <div className="rounded-xl border p-4">
             <p className="text-xs text-muted-foreground">今週の独り言</p>

@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { calcStreak, buildHeatmap, shiftDate } from '../src/lib/activity.ts';
+import {
+  calcStreak,
+  buildHeatmap,
+  shiftDate,
+  summarizeWeeklyGoal,
+  weekStartJst,
+} from '../src/lib/activity.ts';
 import { parseCompositionsCsv } from '../src/lib/composition-csv.ts';
 import { ttsCacheKey } from '../src/lib/tts-cache.ts';
 import { isLocalSupabase, localMailboxUrl } from '../src/lib/local-dev.ts';
@@ -351,6 +357,76 @@ describe('activity: 連続日数とヒートマップ', () => {
     assert.ok(both && studyOnly);
     assert.equal(both.level, studyOnly.level);
     assert.equal(both.studySec, 20 * 60);
+  });
+});
+
+describe('activity: 週の学習目標', () => {
+  const studyRow = (activity_date: string, studySec: number): DailyActivity => ({
+    user_id: 'u',
+    activity_date,
+    reproduction_reps: 0,
+    monologue_sec: 0,
+    recording_sec: 0,
+    composition_reps: 0,
+    study_sec: studySec,
+  });
+
+  it('週は月曜始まり。日曜は前の月曜に属する', () => {
+    // 2026-08-24(月) 〜 2026-08-30(日)
+    assert.equal(weekStartJst('2026-08-24'), '2026-08-24'); // 月曜そのもの
+    assert.equal(weekStartJst('2026-08-29'), '2026-08-24'); // 土曜
+    assert.equal(weekStartJst('2026-08-30'), '2026-08-24'); // 日曜は同じ週の末日
+    assert.equal(weekStartJst('2026-08-31'), '2026-08-31'); // 翌月曜で切り替わる
+  });
+
+  it('月・年をまたぐ週でも崩れない', () => {
+    assert.equal(weekStartJst('2026-01-01'), '2025-12-29'); // 木曜
+    assert.equal(weekStartJst('2026-03-01'), '2026-02-23'); // 日曜
+  });
+
+  it('進捗・残り・ペースを出す（水曜時点）', () => {
+    const rows = [
+      studyRow('2026-08-24', 60 * 60), // 月 1時間
+      studyRow('2026-08-25', 30 * 60), // 火 30分
+      studyRow('2026-08-26', 30 * 60), // 水 30分
+      studyRow('2026-08-23', 99 * 60), // 前の週。混ざらないこと
+    ];
+    const s = summarizeWeeklyGoal(rows, 7 * 3600, '2026-08-26');
+
+    assert.equal(s.weekStart, '2026-08-24');
+    assert.equal(s.weekEnd, '2026-08-30');
+    assert.equal(s.studySec, 2 * 3600);
+    assert.equal(s.achieved, false);
+    assert.equal(s.remainingSec, 5 * 3600);
+    assert.equal(s.remainingDays, 5); // 水・木・金・土・日
+    assert.equal(s.perDaySec, 3600);
+    assert.equal(s.paceSec, 3 * 3600); // 目標7時間 × 3日/7日
+    assert.equal(s.behind, true); // 2時間 < 3時間
+    assert.equal(s.days.length, 7);
+    assert.deepEqual(
+      s.days.map((d) => d.label),
+      ['月', '火', '水', '木', '金', '土', '日'],
+    );
+    assert.equal(s.days[2].isToday, true);
+    assert.equal(s.days[3].isFuture, true);
+  });
+
+  it('達成したら残りは0で頭打ち、超過は ratio に残る', () => {
+    const s = summarizeWeeklyGoal([studyRow('2026-08-24', 10 * 3600)], 7 * 3600, '2026-08-30');
+    assert.equal(s.achieved, true);
+    assert.equal(s.remainingSec, 0);
+    assert.equal(s.remainingDays, 1); // 日曜
+    assert.equal(s.perDaySec, 0);
+    assert.equal(Math.round(s.ratio * 100), 143);
+    assert.equal(s.behind, false);
+  });
+
+  it('目標未設定（0）なら達成にも未達にもしない', () => {
+    const s = summarizeWeeklyGoal([studyRow('2026-08-24', 3600)], 0, '2026-08-26');
+    assert.equal(s.studySec, 3600);
+    assert.equal(s.ratio, 0);
+    assert.equal(s.achieved, false);
+    assert.equal(s.behind, false);
   });
 });
 

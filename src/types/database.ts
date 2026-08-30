@@ -19,7 +19,10 @@ export type Profile = {
   id: string;
   display_name: string | null;
   why_text: string | null;
+  /** 1日の独り言（＝声を出す）の目標秒数 */
   daily_goal_sec: number;
+  /** 1週間の学習時間の目標秒数。**0 は未設定**（ホームでは設定への誘導を出す） */
+  weekly_goal_sec: number;
   created_at: string;
   updated_at: string;
 };
@@ -182,7 +185,15 @@ type Table<Row, InsertOptionalKeys extends keyof Row> = {
 export type Database = {
   public: {
     Tables: {
-      profiles: Table<Profile, 'display_name' | 'why_text' | 'daily_goal_sec' | 'created_at' | 'updated_at'>;
+      profiles: Table<
+        Profile,
+        | 'display_name'
+        | 'why_text'
+        | 'daily_goal_sec'
+        | 'weekly_goal_sec'
+        | 'created_at'
+        | 'updated_at'
+      >;
       materials: Table<Material, 'id' | 'channel_name' | 'level' | 'thumbnail_url' | 'created_at'>;
       clips: Table<
         Clip,
