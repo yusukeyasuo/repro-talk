@@ -1,6 +1,7 @@
 'use client';
 
-import { Check, Mic, Shuffle, Sparkles, Square } from 'lucide-react';
+import { Check, ListOrdered, Mic, Pencil, Shuffle, Sparkles, Square } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -9,6 +10,13 @@ import { saveMonologueFeedback, saveMonologueSession } from '@/app/actions/monol
 import { addPhrases, markPhraseUsed } from '@/app/actions/phrases';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { useRecorder } from '@/hooks/use-recorder';
@@ -150,19 +158,27 @@ export function MonologueSession({ topics, phrases, goalSec }: Props) {
       {/* お題 */}
       <section className="rounded-xl border p-5">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-xs text-muted-foreground">今日のお題</p>
             <p className="mt-1 text-lg font-medium">{topic?.title_en ?? '—'}</p>
             <p className="text-sm text-muted-foreground">{topic?.title_ja ?? ''}</p>
           </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => setTopicIndex((i) => (i + 1) % Math.max(1, topics.length))}
-            aria-label="別のお題"
-          >
-            <Shuffle className="size-4" />
-          </Button>
+          <div className="flex shrink-0 items-center">
+            {/* 自分のお題は並びの末尾に付くので、送りだけだと届かない。一覧から直接選べるようにする。 */}
+            <TopicPicker
+              topics={topics}
+              currentIndex={topicIndex}
+              onSelect={setTopicIndex}
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setTopicIndex((i) => (i + 1) % Math.max(1, topics.length))}
+              aria-label="別のお題"
+            >
+              <Shuffle className="size-4" />
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -327,5 +343,114 @@ export function MonologueSession({ topics, phrases, goalSec }: Props) {
         )}
       </section>
     </div>
+  );
+}
+
+/** お題の一覧から選ぶ。自分で足したお題を先に出す（そのために足しているので）。 */
+function TopicPicker({
+  topics,
+  currentIndex,
+  onSelect,
+}: {
+  topics: MonologueTopic[];
+  currentIndex: number;
+  onSelect: (index: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  // 選択は配列の添字で持っているので、絞り込んでも元の位置を連れて回る。
+  const indexed = topics.map((topic, index) => ({ topic, index }));
+  const own = indexed.filter(({ topic }) => topic.user_id !== null);
+  const seeds = indexed.filter(({ topic }) => topic.user_id === null);
+
+  function choose(index: number) {
+    onSelect(index);
+    setOpen(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button size="icon" variant="ghost" aria-label="お題を選ぶ">
+            <ListOrdered className="size-4" />
+          </Button>
+        }
+      />
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>お題を選ぶ</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          {own.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-xs font-medium text-muted-foreground">自分のお題</h3>
+              <ul className="space-y-1">
+                {own.map(({ topic, index }) => (
+                  <TopicPickerRow
+                    key={topic.id}
+                    topic={topic}
+                    selected={index === currentIndex}
+                    onSelect={() => choose(index)}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-medium text-muted-foreground">
+              最初から入っているお題
+            </h3>
+            <ul className="space-y-1">
+              {seeds.map(({ topic, index }) => (
+                <TopicPickerRow
+                  key={topic.id}
+                  topic={topic}
+                  selected={index === currentIndex}
+                  onSelect={() => choose(index)}
+                />
+              ))}
+            </ul>
+          </section>
+
+          <Link
+            href="/monologue/topics"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:underline"
+          >
+            <Pencil className="size-3.5" />
+            お題を追加・編集する
+          </Link>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TopicPickerRow({
+  topic,
+  selected,
+  onSelect,
+}: {
+  topic: MonologueTopic;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected}
+        className={cn(
+          'w-full rounded-lg border p-3 text-left transition-colors',
+          selected ? 'border-foreground bg-accent' : 'hover:bg-accent/40',
+        )}
+      >
+        <span className="block font-mono text-sm">{topic.title_en}</span>
+        <span className="block text-xs text-muted-foreground">{topic.title_ja}</span>
+      </button>
+    </li>
   );
 }

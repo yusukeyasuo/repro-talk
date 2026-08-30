@@ -9,6 +9,7 @@ import {
   weekStartJst,
 } from '../src/lib/activity.ts';
 import { parseCompositionsCsv } from '../src/lib/composition-csv.ts';
+import { parseMonologueTopicsCsv } from '../src/lib/monologue-topic-csv.ts';
 import { ttsCacheKey } from '../src/lib/tts-cache.ts';
 import { isLocalSupabase, localMailboxUrl } from '../src/lib/local-dev.ts';
 import {
@@ -562,5 +563,44 @@ describe('tts-cache: クラウドTTSのキャッシュキー', () => {
 
   it('文が違えばキーも変わる', () => {
     assert.notEqual(ttsCacheKey('Hello world.'), ttsCacheKey('Goodbye world.'));
+  });
+});
+
+describe('monologue-topic-csv: 独り言のお題の一括登録パース', () => {
+  it('英語が先、日本語が後（英作文とは逆の並び）', () => {
+    const { rows, skipped } = parseMonologueTopicsCsv(
+      'What I did today,今日やったこと\nMy hometown,地元の話',
+    );
+    assert.deepEqual(rows, [
+      { titleEn: 'What I did today', titleJa: '今日やったこと' },
+      { titleEn: 'My hometown', titleJa: '地元の話' },
+    ]);
+    assert.equal(skipped, 0);
+  });
+
+  it('スプレッドシート由来のタブ区切り', () => {
+    const { rows } = parseMonologueTopicsCsv('My hobbies\t趣味の話');
+    assert.deepEqual(rows, [{ titleEn: 'My hobbies', titleJa: '趣味の話' }]);
+  });
+
+  it('お題にカンマが入っても引用符で守れる', () => {
+    const { rows } = parseMonologueTopicsCsv('"Work, life, and the gap",仕事と生活の間');
+    assert.deepEqual(rows, [{ titleEn: 'Work, life, and the gap', titleJa: '仕事と生活の間' }]);
+  });
+
+  it('見出し行を落とす', () => {
+    const { rows, skipped } = parseMonologueTopicsCsv('英語,日本語\nMy hometown,地元の話');
+    assert.deepEqual(rows, [{ titleEn: 'My hometown', titleJa: '地元の話' }]);
+    assert.equal(skipped, 0);
+  });
+
+  it('片方だけの行はスキップし、空行は数えない', () => {
+    const { rows, skipped } = parseMonologueTopicsCsv('My hometown,地元の話\nOnly English\n\n');
+    assert.deepEqual(rows, [{ titleEn: 'My hometown', titleJa: '地元の話' }]);
+    assert.equal(skipped, 1);
+  });
+
+  it('空文字は0件', () => {
+    assert.deepEqual(parseMonologueTopicsCsv('   '), { rows: [], skipped: 0 });
   });
 });
