@@ -244,6 +244,13 @@ export function MonologueSession({ topics, phrases, goalSec }: Props) {
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-medium">今日使うフレーズ</h2>
           <Badge variant="secondary">使えたらタップ</Badge>
+          {/* 在庫の全部と「身についた」はここから。下のナビには置いていない。 */}
+          <Link
+            href="/phrases"
+            className="-mr-2 ml-auto flex min-h-10 touch-manipulation items-center px-2 text-xs text-muted-foreground hover:underline"
+          >
+            すべて見る
+          </Link>
         </div>
 
         {phrases.length === 0 ? (

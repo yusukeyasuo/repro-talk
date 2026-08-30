@@ -255,10 +255,15 @@ export default async function DashboardPage() {
           <p className="mt-1 text-xs text-muted-foreground">
             リプロダクションで入れた 100 を、独り言の 0 から出せたときに繋がります。
           </p>
-          <Button variant="outline" size="sm" className="mt-3" nativeButton={false} render={<Link href="/monologue" />}>
-            独り言で使う
-            <ArrowRight className="size-4" />
-          </Button>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/monologue" />}>
+              独り言で使う
+              <ArrowRight className="size-4" />
+            </Button>
+            <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/phrases" />}>
+              フレーズ一覧
+            </Button>
+          </div>
         </section>
       )}
     </div>

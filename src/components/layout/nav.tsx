@@ -7,14 +7,26 @@ import { usePathname } from 'next/navigation';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
-const ITEMS = [
+type Item = { href: string; label: string; icon: LucideIcon; exact: boolean };
+
+/**
+ * 毎日通る導線。画面下のナビはこの5つだけに絞る（7つ並べると1マスが指より狭くなる）。
+ */
+const PRIMARY: Item[] = [
   { href: '/', label: 'ホーム', icon: Home, exact: true },
   { href: '/materials', label: '素材', icon: Library, exact: false },
   { href: '/monologue', label: '独り言', icon: Mic, exact: false },
   { href: '/compositions', label: '英作文', icon: Zap, exact: false },
+  { href: '/settings', label: '設定', icon: Settings, exact: false },
+];
+
+/**
+ * 毎日は開かないもの。横幅のある PC のナビには出すが、スマホでは設定ページから辿る
+ * （フレーズは独り言ページの「今日使うフレーズ」からも開ける）。
+ */
+const SECONDARY: Item[] = [
   { href: '/phrases', label: 'フレーズ', icon: Quote, exact: false },
   { href: '/guide', label: '使い方', icon: BookOpen, exact: false },
-  { href: '/settings', label: '設定', icon: Settings, exact: false },
 ];
 
 /**
@@ -47,7 +59,7 @@ export function TopNav() {
           repro-talk
         </Link>
         <nav className="flex items-center gap-1">
-          {ITEMS.map(({ href, label, icon: Icon, exact }) => (
+          {[...PRIMARY, ...SECONDARY].map(({ href, label, icon: Icon, exact }) => (
             <Link
               key={href}
               href={href}
@@ -77,21 +89,25 @@ export function BottomNav() {
 
   return (
     <nav className="border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-      <ul className="grid grid-cols-7">
-        {ITEMS.map(({ href, label, icon: Icon, exact }) => (
-          <li key={href}>
-            <Link
-              href={href}
-              className={cn(
-                'flex flex-col items-center gap-1 py-2 text-[10px] transition-colors',
-                isActive(href, exact) ? 'text-foreground' : 'text-muted-foreground',
-              )}
-            >
-              <NavIcon icon={Icon} className="size-5" />
-              {label}
-            </Link>
-          </li>
-        ))}
+      <ul className="grid grid-cols-5">
+        {PRIMARY.map(({ href, label, icon: Icon, exact }) => {
+          const active = isActive(href, exact);
+          return (
+            <li key={href}>
+              <Link
+                href={href}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex min-h-14 touch-manipulation flex-col items-center justify-center gap-1 px-1 py-2 text-xs transition-colors',
+                  active ? 'font-medium text-foreground' : 'text-muted-foreground',
+                )}
+              >
+                <NavIcon icon={Icon} className="size-6" />
+                {label}
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );
