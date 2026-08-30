@@ -19,9 +19,11 @@ export function Heatmap({ columns, today }: { columns: HeatmapCell[][]; today: s
             {week.map((cell) => (
               <div
                 key={cell.date}
-                title={`${cell.date} — リプロ ${cell.reps}回 / 独り言 ${Math.round(
-                  cell.monologueSec / 60,
-                )}分 / 英作文 ${cell.compositionReps}回`}
+                title={`${cell.date} — 学習 ${Math.round(cell.studySec / 60)}分 / リプロ ${
+                  cell.reps
+                }回 / 独り言 ${Math.round(cell.monologueSec / 60)}分 / 英作文 ${
+                  cell.compositionReps
+                }回`}
                 className={cn(
                   'size-3.5 rounded-[4px]',
                   LEVEL_CLASS[cell.level],

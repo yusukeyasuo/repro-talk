@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { deleteCourse, updateComposition, updateCourse } from '@/app/actions/compositions';
 import { CompositionManager } from '@/components/composition/composition-manager';
 import { CompositionPlayer, type PlayProgress } from '@/components/composition/composition-player';
+import { StudyStarter } from '@/components/study/study-starter';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -25,7 +26,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import * as speaker from '@/lib/speaker';
 import { cn } from '@/lib/utils';
-import type { Composition, CompositionCourse } from '@/types/database';
+import type { Composition, CompositionCourse, StudySession } from '@/types/database';
 
 type PlayOrder = 'seq' | 'random';
 type PlayTarget = 'all' | 'starred';
@@ -62,9 +63,12 @@ function shuffle<T>(arr: T[]): T[] {
 export function CourseScreen({
   course,
   compositions,
+  running,
 }: {
   course: CompositionCourse;
   compositions: Composition[];
+  /** 計測中の学習（プレイヤー中は本画面ごと差し替わるので、開始ボタンは idle 側に置く） */
+  running: StudySession | null;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<'idle' | 'play'>('idle');
@@ -275,6 +279,8 @@ export function CourseScreen({
           </div>
         </div>
       </header>
+
+      <StudyStarter kind="composition" running={running} />
 
       {/* 流す設定 */}
       <section className="space-y-4 rounded-xl border p-5">

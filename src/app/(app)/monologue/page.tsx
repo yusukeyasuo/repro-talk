@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 
 import { MonologueSession } from '@/components/monologue/monologue-session';
+import { StudyStarter } from '@/components/study/study-starter';
+import { getRunningStudySession } from '@/lib/study-server';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import type { MonologueTopic, Phrase, Profile } from '@/types/database';
 
@@ -12,7 +14,7 @@ export default async function MonologuePage() {
 
   const supabase = await createClient();
 
-  const [{ data: topics }, { data: phrases }, { data: profile }] = await Promise.all([
+  const [{ data: topics }, { data: phrases }, { data: profile }, running] = await Promise.all([
     supabase.from('monologue_topics').select('*').order('sort_order'),
     // まだ卒業していない在庫だけを、新しく入れた順に出す（温かいうちに口から出す）。
     // 一度でも使えたフレーズは graduated_at が入り、ここには出てこない。
@@ -23,6 +25,7 @@ export default async function MonologuePage() {
       .order('created_at', { ascending: false })
       .limit(3),
     supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+    getRunningStudySession(),
   ]);
 
   return (
@@ -33,6 +36,9 @@ export default async function MonologuePage() {
           自力で 0 から英語を作り出す練習。口が開いている時間は全部これに使えます。
         </p>
       </header>
+
+      {/* 録音タイマーは「声を出していた時間」。こちらは机に向かっていた時間で、別に数える。 */}
+      <StudyStarter kind="monologue" running={running} />
 
       <MonologueSession
         topics={(topics ?? []) as MonologueTopic[]}

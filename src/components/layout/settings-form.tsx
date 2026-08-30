@@ -18,21 +18,34 @@ const GOALS = [
   { sec: 600, label: '10分' },
 ];
 
+/** 週の学習時間の目標。0 は「決めない」＝ホームに目標セクションを出さない。 */
+const WEEKLY_GOALS = [
+  { sec: 0, label: '決めない' },
+  { sec: 3 * 3600, label: '3時間' },
+  { sec: 5 * 3600, label: '5時間' },
+  { sec: 7 * 3600, label: '7時間' },
+  { sec: 10 * 3600, label: '10時間' },
+  { sec: 14 * 3600, label: '14時間' },
+];
+
 export function SettingsForm({
   whyText: initialWhy,
   dailyGoalSec: initialGoal,
+  weeklyGoalSec: initialWeeklyGoal,
 }: {
   whyText: string;
   dailyGoalSec: number;
+  weeklyGoalSec: number;
 }) {
   const router = useRouter();
   const [whyText, setWhyText] = useState(initialWhy);
   const [goalSec, setGoalSec] = useState(initialGoal);
+  const [weeklyGoalSec, setWeeklyGoalSec] = useState(initialWeeklyGoal);
   const [pending, startTransition] = useTransition();
 
   function save() {
     startTransition(async () => {
-      const result = await updateProfile({ whyText, dailyGoalSec: goalSec });
+      const result = await updateProfile({ whyText, dailyGoalSec: goalSec, weeklyGoalSec });
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -76,6 +89,30 @@ export function SettingsForm({
         </div>
         <p className="text-xs text-muted-foreground">
           最初は1分で十分です。続けば勝手に伸びます。
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <Label>週の学習目標時間</Label>
+        <div className="flex flex-wrap gap-2">
+          {WEEKLY_GOALS.map((goal) => (
+            <button
+              key={goal.sec}
+              type="button"
+              onClick={() => setWeeklyGoalSec(goal.sec)}
+              className={cn(
+                'rounded-md border px-3 py-1.5 text-sm transition-colors',
+                weeklyGoalSec === goal.sec
+                  ? 'border-foreground bg-accent'
+                  : 'hover:bg-accent/50',
+              )}
+            >
+              {goal.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          各学習ページの「開始」で計った時間の合計です。週は月曜始まりで、月曜の朝にリセットされます。決めるとホームに進捗が出ます。
         </p>
       </section>
 
