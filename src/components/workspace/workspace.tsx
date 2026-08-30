@@ -416,8 +416,10 @@ export function Workspace({ clip, material, userId, running }: Props) {
     };
   }, []);
 
+  // 1カラムのときも列を minmax(0,1fr) で止める。既定の auto 列は中身の min-content まで
+  // 広がるので、収まらない行が1つあるだけでページ全体が画面より横に広がる。
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
       {studyGuardDialog}
 
       {/* 左: プレイヤーと録音 */}

@@ -161,11 +161,12 @@ export function AnnotationEditor({ text, annotations, onChange }: Props) {
                   value={annotation.surface ?? ''}
                   onChange={(e) => updateSurface(annotation.id, e.target.value)}
                   placeholder="実際の音 (gonna)"
-                  className="h-7 w-36 text-xs"
+                  className="h-7 w-32 shrink-0 text-xs"
                 />
               )}
               {annotation.note && (
-                <span className="truncate text-xs text-muted-foreground">
+                // 狭い画面ではまず補足から詰める（基準幅0）。記号を付けた語のほうを残す。
+                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                   {annotation.note}
                 </span>
               )}
