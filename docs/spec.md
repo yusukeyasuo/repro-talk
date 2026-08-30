@@ -204,6 +204,7 @@ URL は `watch?v=` / `youtu.be/` / `shorts/` / `embed/` / 生のID / プロト�
 **お題の管理**（`/monologue/topics`、お題を選ぶダイアログから入れる）
 
 - 自分のお題の CRUD。`title_en`（英語）＋`title_ja`（日本語）の対で、両方必須。`sort_order` は 1000 番台に積むので、必ず共通シード30件の後ろに並ぶ
+- **AIに提案してもらう**（`POST /api/ai/topic-ideas`）。「仕事で使いそうなテーマ」のような**方向性**と件数（10/20/30）を渡すと候補が並び、チェックを入れたものだけ既存の一括登録経路（`importCustomTopics`）で登録する。既存のお題（共通シード＋自分のぶん）は**サーバ側で引いて**プロンプトに渡し、返ってきた候補も `dedupeTopicSuggestions` で重複を落とす（表記ゆれを畳んで一致するものだけ。似ているだけのものは残して採否を本人に委ねる）。「出し直す」は、そのダイアログで見せた候補を `avoid` に積んで同じものを引かせない。候補そのものは保存せず、登録されたお題だけが残る
 - **貼り付けで一括登録**。1行 =「英語,日本語」。英作文（日本語,英語）とは並びが逆なのは、お題の画面が英語を主に出しているため。区切り・引用符・見出し行の扱いは英作文と共通（`src/lib/two-column-paste.ts`）
 - 共通シード30件（`user_id is null`）は**読むだけ**。全員に共通の行なので編集・削除はできない（RLS が弾く）。文言を変えたいときは自分のお題として書き直す
 - お題を消しても過去の独り言の記録は残る（`monologue_sessions.topic_id` が `on delete set null`）
@@ -325,6 +326,7 @@ type Annotation = {
 | `POST /api/ai/phrases` | `transcript` | `phrases[{text, meaning_ja, why}]` | `medium` | 8000 |
 | `POST /api/ai/naturalize` | `text`, `note?`(言いたいこと) | `naturalized`, `note_ja`(どう自然にしたか・1〜2文) | `medium` | 4000 |
 | `POST /api/ai/monologue-feedback` | `ja_memo`, `topic` | `suggestions[{text, meaning_ja, examples[]}]` | `medium` | 8000 |
+| `POST /api/ai/topic-ideas` | `direction`(方向性), `count`(10/20/30), `avoid?`(もう見た候補) | `topics[{title_en, title_ja, why_ja}]` | `medium` | 8000 / 16000 |
 | `POST /api/ai/grammar` | `ja`, `en`（例文1件） | `headline`, `build`(組み立ての順番), `points[{focus, label, detail}]`, `pitfalls[{wrong, why}]`, `variations[{en, ja}]` | `high` | 16000 |
 
 **共通の約束事**
@@ -425,7 +427,8 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | **週の学習目標の通しUI**（Playwright・ログイン状態） | 設定で「7時間」を選んで保存 → ホームに `4時間34分 / 7時間・65%`・残りとあと何日・曜日ごとの棒グラフが出ることを確認。**未設定（0）**では学習時間だけ出して「目標を決める」へ誘導、**達成時**は緑のバー・153%・「超過ぶん 1時間34分」になることを確認。曜日の棒は7列すべて同じ高さ・同じ上端に揃うことを DOM の実測で確認（0分の日でラベルが潰れて列がずれるのを修正済み）。スマホ幅（390px）でも崩れないことを確認 |
 | **ドリル中の文法解説**（Playwright・ログイン状態・`/api/ai/grammar`） | 考える時間中はボタンが `disabled`、答え表示後に押すと一時停止して面が開き、解説が出るまで文が送られないことを確認。閉じたあとも8秒待って同じ文・「一時停止中」のままで、勝手に再開しないことを確認。スマホ幅（390px）で横スクロールが出ないことを確認 |
 | **文法解説のプロンプト出力**（`claude-opus-5` / `effort: high` を直接2文で実行） | 「彼にそのことを話しておけばよかった／I should have told him about it.」「駅に着いたら電話するね／I'll give you a call when I get to the station.」で、組み立ての順番・迷いどころ（should have + 過去分詞、時の副詞節の現在形など）・やりがちな誤り・応用例文2つが揃うこと、`focus` が英文の逐語部分文字列になっていることを確認 |
-| ビルド / Lint / ユニットテスト66件 | 全通過（`next build` で `/api/ai/naturalize` 含む全ルート生成、`tsc --noEmit`・eslint クリーン） |
+| **お題のAI提案**（Playwright・ログイン状態・`/api/ai/topic-ideas`） | 「仕事で使いそうなテーマ」＋30件で候補が30件並び、既存30シード（`My job, explained simply` 等）と重ならないことを確認。ラベルのテキスト側とチェックボックス本体のどちらを押しても選択が切り替わり、フッターの件数が追随することを確認（30→28）。2件だけ選んで登録すると「自分のお題 2 件」になり一覧に出ることを確認。**出し直す**で、直前に見せた10件と1件も重ならない別の10件（登録済みの2件も除外）が返ることを確認。スマホ幅（375px）で本文だけがスクロールし「登録」ボタンが常に画面内に残ることを確認 |
+| ビルド / Lint / ユニットテスト78件 | 全通過（`next build` で `/api/ai/naturalize` 含む全ルート生成、`tsc --noEmit`・eslint クリーン） |
 
 ### 未検証
 
@@ -451,4 +454,5 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 - 週の学習目標（月曜始まりの週の切り出しと月・年またぎ、進捗・残り日数・1日あたり・ペース、達成時の頭打ちと超過、目標未設定の扱い）
 - 学習時間（経過秒の算出と時計の巻き戻し、`mm:ss`/`h:mm:ss` 表示、「1時間35分」表示、JST の日付・時刻の読み書き、あとから直すときの終了時刻の再計算と上限の丸め）
 - YouTube URL の解釈（各種形式、不正入力）
+- お題候補の重複除去（表記ゆれを畳んだ照合、英日どちらか一致で除外、応答内の重複、片方が空の行）
 - CSV／TSV の一括登録パース（クオート・カンマ・タブ・ヘッダー有無・改行/CRLF/BOM）。英作文（日本語,英語）と独り言のお題（英語,日本語）の両方

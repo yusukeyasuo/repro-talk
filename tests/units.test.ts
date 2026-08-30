@@ -10,6 +10,7 @@ import {
 } from '../src/lib/activity.ts';
 import { parseCompositionsCsv } from '../src/lib/composition-csv.ts';
 import { parseMonologueTopicsCsv } from '../src/lib/monologue-topic-csv.ts';
+import { dedupeTopicSuggestions, normalizeTopicKey } from '../src/lib/topic-suggestions.ts';
 import { ttsCacheKey } from '../src/lib/tts-cache.ts';
 import { isLocalSupabase, localMailboxUrl } from '../src/lib/local-dev.ts';
 import {
@@ -602,5 +603,68 @@ describe('monologue-topic-csv: 独り言のお題の一括登録パース', () =
 
   it('空文字は0件', () => {
     assert.deepEqual(parseMonologueTopicsCsv('   '), { rows: [], skipped: 0 });
+  });
+});
+
+describe('dedupeTopicSuggestions', () => {
+  const suggest = (titleEn: string, titleJa: string, whyJa = '') => ({ titleEn, titleJa, whyJa });
+
+  it('記号・大文字小文字・空白の違いを畳んで同じキーにする', () => {
+    assert.equal(
+      normalizeTopicKey('My job, explained simply'),
+      normalizeTopicKey('my job explained simply'),
+    );
+    assert.notEqual(normalizeTopicKey('今日やった仕事'), normalizeTopicKey('今日やったこと'));
+  });
+
+  it('既存のお題と一致する候補を落とす（英語・日本語のどちらか一致で落ちる）', () => {
+    const kept = dedupeTopicSuggestions(
+      [
+        suggest('My job, explained simply', '仕事を簡単に説明する'),
+        suggest('A different angle', '今日やったこと'),
+        suggest('What I worked on today', '今日やった仕事'),
+      ],
+      [
+        { titleEn: 'my job explained simply', titleJa: '自分の仕事を簡単に説明する' },
+        { titleEn: 'What I did today', titleJa: '今日やったこと' },
+      ],
+    );
+    assert.deepEqual(kept, [suggest('What I worked on today', '今日やった仕事')]);
+  });
+
+  it('似ているだけの候補は落とさない（採否は本人に残す）', () => {
+    const kept = dedupeTopicSuggestions(
+      [suggest('What I worked on today', '今日やった仕事')],
+      [{ titleEn: 'What I did today', titleJa: '今日やったこと' }],
+    );
+    assert.equal(kept.length, 1);
+  });
+
+  it('応答の中の重複も畳む', () => {
+    const kept = dedupeTopicSuggestions(
+      [
+        suggest('A meeting I had today', '今日あった会議'),
+        suggest('A meeting I had today.', '今日の打ち合わせ'),
+        suggest('Another meeting', '今日あった会議'),
+      ],
+      [],
+    );
+    assert.deepEqual(kept, [suggest('A meeting I had today', '今日あった会議')]);
+  });
+
+  it('片方が空の候補と、前後の空白だけの候補は落とす', () => {
+    const kept = dedupeTopicSuggestions(
+      [suggest('Only English', ''), suggest('  ', '日本語だけ'), suggest(' Kept ', ' 残る ', ' 理由 ')],
+      [],
+    );
+    assert.deepEqual(kept, [suggest('Kept', '残る', '理由')]);
+  });
+
+  it('existing の日本語が空でも、全部の候補を落としたりしない', () => {
+    const kept = dedupeTopicSuggestions(
+      [suggest('A new one', '新しいお題')],
+      [{ titleEn: 'Already shown', titleJa: '' }],
+    );
+    assert.equal(kept.length, 1);
   });
 });
