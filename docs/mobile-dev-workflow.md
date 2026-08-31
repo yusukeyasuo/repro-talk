@@ -165,6 +165,8 @@ Production と同じ値でよい（案Aは本番DBを共有するため）。
 
 ### 5-2. Supabase の Auth redirect URL にプレビューを登録
 
+**（2026-08-31 完了）**
+
 ダッシュボード → Authentication → URL Configuration → **Redirect URLs** に1行足す。
 
 ```
@@ -189,10 +191,22 @@ https://repro-talk-*-yusukeyasuos-projects.vercel.app/**
 
 `＋` 付きエイリアス（例 `y.yasuo+preview@…`）で、プレビューURL から Magic Link 登録する。
 
-### 5-4. Deployment Protection の確認
+### 5-4. Deployment Protection（2026-08-31 実測：**有効**）
 
-Vercel は既定でプレビューに認証をかけることがある。有効だとスマホのブラウザで
-Vercel にログインしないとプレビューを開けない。**スマホで開けるか一度試す。**
+プレビューURLは `vercel.com/sso-api` へ 302 する。つまり **Vercel にログインしていない
+ブラウザからはプレビューを開けない**（本番 `repro-talk.vercel.app` は 200 で無保護）。
+
+スマホでは、そのブラウザで一度 vercel.com にログインしておけば、以降は新しい
+プレビューURLでも自動リダイレクトで通る（ブランチごとの手動ログインは不要）。
+
+**残る摩擦は Magic Link のブラウザ違い。** メールアプリ内のブラウザでリンクを開くと
+Vercel のセッションが無く弾かれる。しかも Magic Link は使い捨てなので、そこで1通消える。
+リンクは**長押しして Safari で開く**。失敗したら、認証済みのブラウザから取り直す。
+
+保護を切ればこの摩擦は消えるが、**このリポジトリは public** なので、
+プレビューURLはPRコメント経由で誰でも読める状態になる。ログインは Magic Link 必須で
+データは RLS が守るため情報漏洩には直結しないが、`/login` から任意のメールアドレス宛に
+メールを送らせる余地が生まれる。**保護は有効のままにしておく。**
 
 ---
 
