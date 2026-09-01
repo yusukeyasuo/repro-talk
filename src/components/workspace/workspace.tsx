@@ -62,9 +62,9 @@ export function Workspace({ clip, material, userId, running }: Props) {
   const [annotations, setAnnotations] = useState<Annotation[]>(clip.annotations ?? []);
   const [memo, setMemo] = useState(clip.memo ?? '');
 
-  // 自作テキストは文単位で回す
+  // 自作テキストは文単位で回す。オフセット付きのまま持ち、記号をその文だけに絞るのに使う。
   const sentences = useMemo(
-    () => (isText ? splitSentences(transcript).map((s) => s.text) : []),
+    () => (isText ? splitSentences(transcript) : []),
     [isText, transcript],
   );
   const [sentenceIndex, setSentenceIndex] = useState(0);
@@ -428,6 +428,8 @@ export function Workspace({ clip, material, userId, running }: Props) {
           <SentencePlayer
             ref={sentencePlayerRef}
             sentences={sentences}
+            transcript={transcript}
+            annotations={annotations}
             index={currentIndex}
             rate={rate}
             onIndexChange={(i) => {
