@@ -2,6 +2,7 @@
 
 import { ANNOTATION_META, type Annotation, type AnnotationType } from '@/types/annotation';
 import { splitSentences } from '@/lib/transcript';
+import { cn } from '@/lib/utils';
 
 type Segment = {
   start: number;
@@ -87,21 +88,44 @@ type Props = {
   /** 選択で注釈を付けられるようにする（ワークスペースの編集モード） */
   editable?: boolean;
   rootRef?: React.Ref<HTMLDivElement>;
+  /**
+   * 与えると transcript のこの [start, end) だけを描く（プレイヤーの1文表示）。
+   * オフセットは元テキスト基準のまま扱うので、注釈を貼り直す必要はない。
+   */
+  range?: { start: number; end: number };
+  /** 文字サイズ・行間・揃えの差し替え（プレイヤーの1文表示は中央寄せ） */
+  className?: string;
 };
+
+/** 文ごとに行を分ける。分割できなければ全体を1行として扱う。 */
+function sentenceLines(text: string): { start: number; end: number }[] {
+  const sentences = splitSentences(text);
+  return sentences.length > 0 ? sentences : [{ start: 0, end: text.length }];
+}
 
 /**
  * 紙に書き出してカラーペンで記号を書き込む作業の代替。
  * 各セグメントに data-start を持たせ、選択範囲から文字インデックスを復元できるようにする。
  */
-export function AnnotatedText({ text, annotations, editable = false, rootRef }: Props) {
-  const sentences = splitSentences(text);
-  const lines = sentences.length > 0 ? sentences : [{ text, start: 0, end: text.length }];
+export function AnnotatedText({
+  text,
+  annotations,
+  editable = false,
+  rootRef,
+  range,
+  className,
+}: Props) {
+  // range を渡されたときは1文だけを描くので、全文の文分割はしない
+  const lines = range ? [range] : sentenceLines(text);
 
   return (
     <div
       ref={rootRef}
       data-annotated-root=""
-      className="space-y-6 font-mono text-lg leading-[2.6] tracking-wide select-text"
+      className={cn(
+        'space-y-6 font-mono text-lg leading-[2.6] tracking-wide select-text',
+        className,
+      )}
       style={{ cursor: editable ? 'text' : undefined }}
     >
       {lines.map((line) => {
