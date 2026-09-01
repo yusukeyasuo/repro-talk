@@ -141,6 +141,35 @@ B/C を検討する。マイグレーションの追加ペースは 2026-08-02�
    ローカル Supabase で確認してからマージする。
 3. それ以外（UI・文言・ロジック）は、プレビューURLを実機で触って確認 → マージしてよい。
 
+### スマホでの一周
+
+1. Claude Code on the web で修正させる → ブランチと PR ができる
+2. GitHub モバイルで PR を開く
+3. **`migration` ラベルが付いていたら、ここで中止**して Mac に戻る
+4. Vercel のコメントにあるプレビューURLを開き、**プレビュー専用アカウント**で実機確認
+   （Magic Link はメールアプリ内蔵ブラウザではなく Safari で開く）
+5. **Enable auto-merge** を押す
+6. `checks` が緑になった時点で自動マージ → 本番デプロイ → ブランチも自動削除
+
+見張る必要があるのは4だけ。5を押したあとは離れてよい。
+
+## 4-1. main の ruleset（2026-09-01 設定）
+
+`main protection`（id `22013784`、`~DEFAULT_BRANCH` に適用、**バイパスなし**）。
+
+| ルール | 内容 |
+|---|---|
+| `pull_request` | PR 必須。承認数は **0**（自分のPRは自分で承認できないため、1にすると自分をロックアウトする） |
+| `required_status_checks` | `checks` ジョブが緑であること |
+| `non_fast_forward` | force push 禁止 |
+| `deletion` | main の削除禁止 |
+
+`strict_required_status_checks_policy` は **false**。true にすると main が動くたびに
+ブランチの更新を要求され、スマホからの往復が増える。開発者が1人で同時PRが稀なら false でよい。
+
+**バイパスを許していないので、緊急時も直接 push はできない。** 必要なら ruleset を
+一時的に Disabled にしてから作業する（GitHub のモバイルからでも操作できる）。
+
 ---
 
 ## 5. 残っている手作業（Vercel / Supabase 側）
