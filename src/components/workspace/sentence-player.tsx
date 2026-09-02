@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { getTtsUrl, prefetch } from '@/lib/speaker';
 import type { Sentence } from '@/lib/transcript';
 import type { Annotation } from '@/types/annotation';
+import type { Pronunciation } from '@/types/pronunciation';
 
 // preservesPitch は比較的新しい標準プロパティ。lib の版差で型が無くても壊れないよう緩く扱う。
 type PitchAudio = HTMLAudioElement & { preservesPitch?: boolean };
@@ -28,6 +29,12 @@ type Props = {
   transcript: string;
   /** 音の記号。いま出している文にかかっている分だけを描く。 */
   annotations: Annotation[];
+  /** 語ごとの発音記号。空なら未生成。 */
+  pronunciations: Pronunciation[];
+  /** 発音記号がまだ無いときに AI で作る。 */
+  onGeneratePronunciations: () => void;
+  /** 発音記号を生成中か */
+  generatingPronunciations: boolean;
   /** いま練習している文のインデックス */
   index: number;
   rate: number;
@@ -46,6 +53,9 @@ export function SentencePlayer({
   sentences,
   transcript,
   annotations,
+  pronunciations,
+  onGeneratePronunciations,
+  generatingPronunciations,
   index,
   rate,
   onIndexChange,
@@ -58,6 +68,8 @@ export function SentencePlayer({
   const [error, setError] = useState<string | null>(null);
   // 「慣れたら耳だけ」に戻れるよう、記号は畳める
   const [showMarks, setShowMarks] = useState(true);
+  // 発音記号は既定で伏せる（読みを確かめたいときだけ出す）
+  const [showIpa, setShowIpa] = useState(false);
 
   const total = sentences.length;
   const current = sentences[index];
@@ -67,6 +79,15 @@ export function SentencePlayer({
     if (!current) return 0;
     return annotations.filter((a) => a.start < current.end && a.end > current.start).length;
   }, [annotations, current]);
+
+  // この文の語の読みを、出てくる順に1行へ並べる
+  const ipaHere = useMemo(() => {
+    if (!current) return '';
+    return pronunciations
+      .filter((p) => p.start >= current.start && p.end <= current.end)
+      .map((p) => p.ipa)
+      .join(' ');
+  }, [pronunciations, current]);
 
   // 最新のコールバックを ref 経由で参照して再購読を避ける
   const onSentenceEndRef = useRef(onSentenceEnd);
@@ -169,7 +190,7 @@ export function SentencePlayer({
         </div>
       </div>
 
-      <div className="grid min-h-28 place-items-center rounded-md bg-muted/40 p-4">
+      <div className="flex min-h-28 flex-col justify-center rounded-md bg-muted/40 p-4">
         {current ? (
           showMarks && marksHere > 0 ? (
             // 記号は transcript の文字インデックスなので、文を切り出さず range で絞る
@@ -185,19 +206,55 @@ export function SentencePlayer({
         ) : (
           <p className="text-sm text-muted-foreground">本文がありません。「本文を編集」から入れてください。</p>
         )}
+
+        {current && showIpa && (
+          // 語ごとの読みを出てくる順に並べたもの。文の中での音の変化は音の記号のほうが担う。
+          <p className="mt-3 text-center text-sm text-muted-foreground" lang="en-fonipa">
+            {ipaHere || (generatingPronunciations ? '…' : 'この文の発音記号はありません。')}
+          </p>
+        )}
       </div>
 
-      {marksHere > 0 && (
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            {showMarks
-              ? '解析した音の記号を重ねています。'
-              : '記号を隠しています。耳だけで再現してみるとき用。'}
-          </p>
-          <Button size="sm" variant="ghost" onClick={() => setShowMarks((v) => !v)}>
-            {showMarks ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            {showMarks ? '記号を隠す' : '記号を出す'}
-          </Button>
+      {current && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {marksHere > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => setShowMarks((v) => !v)}>
+                {showMarks ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                {showMarks ? '音の記号を隠す' : '音の記号を出す'}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={generatingPronunciations}
+              onClick={() => {
+                // まだ無ければ AI に作らせる。作れたらそのまま出す。
+                if (pronunciations.length === 0) onGeneratePronunciations();
+                setShowIpa((v) => !v);
+              }}
+            >
+              {generatingPronunciations ? (
+                <Spinner className="size-3.5" />
+              ) : showIpa ? (
+                <EyeOff className="size-4" />
+              ) : (
+                <Eye className="size-4" />
+              )}
+              {showIpa ? '発音記号を隠す' : '発音記号を出す'}
+            </Button>
+          </div>
+
+          {marksHere > 0 && !showMarks && (
+            <p className="text-xs text-muted-foreground">
+              記号を隠しています。耳だけで再現してみるとき用。
+            </p>
+          )}
+          {generatingPronunciations && (
+            <p className="text-xs text-muted-foreground">
+              AI が語ごとの発音記号を引いています。10〜30秒ほどかかります。
+            </p>
+          )}
         </div>
       )}
 

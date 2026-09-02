@@ -6,6 +6,7 @@ import { AUTH_REQUIRED, type ActionResult } from '@/lib/action-result';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { normalizeAnnotations, type Annotation } from '@/types/annotation';
 import type { Clip } from '@/types/database';
+import { normalizePronunciations, type Pronunciation } from '@/types/pronunciation';
 
 export async function createClip(input: {
   materialId: string;
@@ -79,6 +80,7 @@ export async function updateClip(input: {
   transcript?: string;
   translationJa?: string | null;
   annotations?: Annotation[];
+  pronunciations?: Pronunciation[];
   memo?: string | null;
   label?: string | null;
   startSec?: number;
@@ -99,7 +101,7 @@ export async function updateClip(input: {
   if (input.endSec !== undefined) patch.end_sec = input.endSec;
   if (input.sourceText !== undefined) patch.source_text = input.sourceText;
 
-  if (input.annotations !== undefined) {
+  if (input.annotations !== undefined || input.pronunciations !== undefined) {
     // transcript も同時に変わるならその長さで、変わらないなら保存済みの長さで丸める
     let length = input.transcript?.length;
     if (length === undefined) {
@@ -110,7 +112,12 @@ export async function updateClip(input: {
         .single();
       length = data?.transcript.length ?? 0;
     }
-    patch.annotations = normalizeAnnotations(input.annotations, length);
+    if (input.annotations !== undefined) {
+      patch.annotations = normalizeAnnotations(input.annotations, length);
+    }
+    if (input.pronunciations !== undefined) {
+      patch.ipa = normalizePronunciations(input.pronunciations, length);
+    }
   }
 
   if (Object.keys(patch).length === 0) return { ok: true, data: undefined };

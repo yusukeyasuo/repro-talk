@@ -96,9 +96,31 @@ export function resolveAiAnnotations(items: unknown, transcript: string): Annota
 }
 
 /**
+ * 旧テキストの [start, end) を新テキストへ貼り直す。覆っていた部分文字列を、
+ * 旧テキストでの出現順位のまま新テキストの同順位へ移す。順位が無ければ最も近い
+ * 一致へ。どこにも無ければ null（＝消えた）。
+ *
+ * 注釈（音の記号）と発音記号で同じ貼り直し方をするので、ここに切り出してある。
+ */
+export function reanchorRange(
+  oldText: string,
+  newText: string,
+  range: { start: number; end: number },
+): { start: number; end: number } | null {
+  const quote = oldText.slice(range.start, range.end);
+  if (!quote) return null;
+
+  const occurrence = occurrenceAt(oldText, quote, range.start);
+  let start = occurrence > 0 ? nthIndexOf(newText, quote, occurrence) : -1;
+  if (start === -1) start = nearestIndexOf(newText, quote, range.start);
+  if (start === -1) return null;
+
+  return { start, end: start + quote.length };
+}
+
+/**
  * transcript を編集したとき、注釈を新テキストへ貼り直す。
- * 各注釈が旧テキストで覆っていた部分文字列を、旧テキストでの出現順位のまま
- * 新テキストの同順位へ移す。順位が無ければ最も近い一致へ。どこにも無ければ落とす。
+ * 消えた注釈だけ落として残りは貼り直す（機械的なオフセット追従はしない）。
  */
 export function reanchorAnnotations(
   annotations: Annotation[],
@@ -107,15 +129,9 @@ export function reanchorAnnotations(
 ): { annotations: Annotation[]; dropped: number } {
   const kept: Annotation[] = [];
   for (const a of annotations) {
-    const quote = oldText.slice(a.start, a.end);
-    if (!quote) continue;
-
-    const occurrence = occurrenceAt(oldText, quote, a.start);
-    let start = occurrence > 0 ? nthIndexOf(newText, quote, occurrence) : -1;
-    if (start === -1) start = nearestIndexOf(newText, quote, a.start);
-    if (start === -1) continue; // 消えた
-
-    kept.push({ ...a, start, end: start + quote.length });
+    const moved = reanchorRange(oldText, newText, a);
+    if (!moved) continue; // 消えた
+    kept.push({ ...a, ...moved });
   }
   const result = normalizeAnnotations(kept, newText.length);
   return { annotations: result, dropped: annotations.length - result.length };
