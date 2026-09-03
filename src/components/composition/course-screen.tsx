@@ -7,6 +7,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { deleteCourse, updateComposition, updateCourse } from '@/app/actions/compositions';
+import { AppliedPracticeDialog } from '@/components/composition/applied-practice-dialog';
 import { CompositionManager } from '@/components/composition/composition-manager';
 import { CompositionPlayer, type PlayProgress } from '@/components/composition/composition-player';
 import { useStudyGuard } from '@/components/study/study-guard';
@@ -30,7 +31,15 @@ import { cn } from '@/lib/utils';
 import type { Composition, CompositionCourse, StudySession } from '@/types/database';
 
 type PlayOrder = 'seq' | 'random';
-type PlayTarget = 'all' | 'starred';
+/** 流す対象。'manual' = 自分で入れた例文だけ / 'applied' = AI に作らせた応用だけ。 */
+type PlayTarget = 'all' | 'starred' | 'manual' | 'applied';
+
+const TARGETS: { value: PlayTarget; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'starred', label: '★のみ' },
+  { value: 'manual', label: '基本のみ' },
+  { value: 'applied', label: '応用のみ' },
+];
 
 const SETTINGS_KEY = 'composition-play-settings';
 const DEFAULT_INTERVAL = 10;
@@ -100,6 +109,10 @@ export function CourseScreen({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const starredCount = starredIds.size;
+  // 応用（AI に作らせて本人が採用した文）と、自分で入れた例文の件数。
+  // 「対象」の絞り込みと、応用練習の案内の両方が見る。
+  const appliedCount = compositions.reduce((n, c) => (c.source === 'ai' ? n + 1 : n), 0);
+  const manualCount = compositions.length - appliedCount;
 
   // 前回の設定（順番・秒数）を localStorage から復元。DB には持たない。
   // localStorage は外部ストア。SSR と初期HTMLは既定値で描き、マウント後に一度だけ同期する。
@@ -110,7 +123,7 @@ export function CourseScreen({
       if (!raw) return;
       const s = JSON.parse(raw) as { order?: string; target?: string; intervalSec?: number };
       if (s.order === 'seq' || s.order === 'random') setOrder(s.order);
-      if (s.target === 'all' || s.target === 'starred') setTarget(s.target);
+      if (TARGETS.some((t) => t.value === s.target)) setTarget(s.target as PlayTarget);
       if (typeof s.intervalSec === 'number') {
         setIntervalSec(Math.min(15, Math.max(3, Math.round(s.intervalSec))));
       }
@@ -185,6 +198,14 @@ export function CourseScreen({
   // 再生列に渡す前に、各例文の starred を楽観状態へ上書きする（サーバ props は refresh まで古い）。
   const withStar = (c: Composition): Composition => ({ ...c, starred: starredIds.has(c.id) });
 
+  // 選んだ「対象」に入る文か。★は楽観状態（starredIds）を見る。
+  const matchesTarget = (c: Composition): boolean => {
+    if (target === 'starred') return starredIds.has(c.id);
+    if (target === 'manual') return c.source !== 'ai';
+    if (target === 'applied') return c.source === 'ai';
+    return true;
+  };
+
   // 端末で英語の読み上げが鳴るかを、ユーザー操作の中で確かめる（クラウド→失敗時は端末合成）。
   function testVoice() {
     speaker.unlock();
@@ -193,10 +214,8 @@ export function CourseScreen({
 
   function startFresh() {
     speaker.unlock(); // 解錠は必ずユーザー操作の中で（iOS 対策）
-    // 「★のみ」なら★付きに絞る。登録順は filter で保たれる。
-    const pool = (target === 'starred' ? compositions.filter((c) => starredIds.has(c.id)) : compositions).map(
-      withStar,
-    );
+    // 選んだ対象で絞る。登録順は filter で保たれる。
+    const pool = compositions.filter(matchesTarget).map(withStar);
     if (pool.length === 0) return; // 念のため（ボタンは無効化済み）
     const seq = order === 'random' ? shuffle(pool) : pool;
     setRun({ sequence: seq, startIndex: 0 });
@@ -245,9 +264,15 @@ export function CourseScreen({
   }
 
   const empty = compositions.length === 0;
-  // 「★のみ」を選んでいるのに★が0件だとスタートできない。
-  const noStarredToPlay = target === 'starred' && starredCount === 0;
-  const canStart = !empty && !noStarredToPlay;
+  const targetCount = compositions.reduce((n, c) => (matchesTarget(c) ? n + 1 : n), 0);
+  // 選んだ対象が0件だとスタートできない（★を1つも付けていない・応用がまだ無い等）。
+  const canStart = targetCount > 0;
+  const targetCounts: Record<PlayTarget, number> = {
+    all: compositions.length,
+    starred: starredCount,
+    manual: manualCount,
+    applied: appliedCount,
+  };
 
   if (mode === 'play' && run) {
     // 確認ダイアログはここでも描く。「計測して始める」でドリルへ移る瞬間に
@@ -312,41 +337,35 @@ export function CourseScreen({
         <div className="space-y-1.5">
           <Label>対象</Label>
           <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setTarget('all');
-                persistSettings({ target: 'all' });
-              }}
-              className={cn(
-                'rounded-lg border p-3 text-sm transition-colors',
-                target === 'all' ? 'border-foreground bg-accent' : 'hover:bg-accent/50',
-              )}
-            >
-              全部
-            </button>
-            <button
-              type="button"
-              disabled={starredCount === 0}
-              onClick={() => {
-                setTarget('starred');
-                persistSettings({ target: 'starred' });
-              }}
-              className={cn(
-                'inline-flex items-center justify-center gap-1.5 rounded-lg border p-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                target === 'starred' ? 'border-foreground bg-accent' : 'hover:bg-accent/50',
-              )}
-            >
-              ★のみ
-              {starredCount > 0 && (
-                <span className="font-mono tabular-nums text-muted-foreground">
-                  {starredCount}
-                </span>
-              )}
-            </button>
+            {TARGETS.map((t) => {
+              const n = targetCounts[t.value];
+              return (
+                <button
+                  key={t.value}
+                  type="button"
+                  aria-pressed={target === t.value}
+                  // 0件の対象は選べない（選べてもスタートできないだけなので、押せなくする）
+                  disabled={t.value !== 'all' && n === 0}
+                  onClick={() => {
+                    setTarget(t.value);
+                    persistSettings({ target: t.value });
+                  }}
+                  className={cn(
+                    'inline-flex items-center justify-center gap-1.5 rounded-lg border p-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                    target === t.value ? 'border-foreground bg-accent' : 'hover:bg-accent/50',
+                  )}
+                >
+                  {t.label}
+                  {t.value !== 'all' && n > 0 && (
+                    <span className="font-mono tabular-nums text-muted-foreground">{n}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           <p className="text-xs text-muted-foreground">
-            「★のみ」は、もう言える文を飛ばして、★を付けた文だけを流します。
+            「★のみ」は、もう言える文を飛ばして★を付けた文だけを流します。「応用のみ」は、AI
+            に作らせた応用問題だけを流します。
           </p>
         </div>
 
@@ -413,9 +432,13 @@ export function CourseScreen({
             例文を1件以上登録するとスタートできます。
           </p>
         ) : (
-          noStarredToPlay && (
+          !canStart && (
             <p className="text-center text-xs text-muted-foreground">
-              ★を付けた例文がありません。下の一覧か、ドリル中に★を付けてください。
+              {target === 'starred'
+                ? '★を付けた例文がありません。下の一覧か、ドリル中に★を付けてください。'
+                : target === 'applied'
+                  ? 'まだ応用がありません。下の「応用を作る」から追加してください。'
+                  : '選んだ対象に流せる例文がありません。'}
             </p>
           )
         )}
@@ -428,6 +451,42 @@ export function CourseScreen({
           </Button>
           <span className="text-xs text-muted-foreground">押して英語が聞こえるか確認</span>
         </div>
+      </section>
+
+      {/* 応用練習：コースの型を組み替えた問題を AI に作らせる */}
+      <section className="space-y-3 rounded-xl border p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-medium">応用練習</h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              コースの例文を2〜3文ずつ組み合わせ、主語や目的語を変えた問題を AI
+              に作らせます。同じ文を繰り返して丸暗記になってきたら、型のまま応用が効くかを試すために使ってください。
+            </p>
+          </div>
+          <div className="shrink-0">
+            <AppliedPracticeDialog
+              courseId={course.id}
+              seedCount={manualCount}
+              // 追加した直後は、そのまま応用だけを流せる状態にしておく
+              onRegistered={() => {
+                setTarget('applied');
+                persistSettings({ target: 'applied' });
+              }}
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {manualCount < 2 ? (
+            <>自分で入れた例文が2件以上あると作れます。</>
+          ) : appliedCount > 0 ? (
+            <>
+              いま応用が <span className="font-mono tabular-nums">{appliedCount}</span>{' '}
+              件あります。上の「対象」で「応用のみ」を選ぶと、応用だけを流せます。
+            </>
+          ) : (
+            <>作った問題は、選んだものだけがこのコースに入ります。</>
+          )}
+        </p>
       </section>
 
       {/* 例文の管理 */}

@@ -122,6 +122,9 @@ export type CompositionCourse = {
   updated_at: string;
 };
 
+/** 例文の出自。'ai' は応用練習で AI が作り、本人が採用した文。 */
+export type CompositionSource = 'manual' | 'ai';
+
 /** 例文1件（日本語→英語）。course_id 内の sort_order 昇順が登録順。 */
 export type Composition = {
   id: string;
@@ -132,6 +135,8 @@ export type Composition = {
   sort_order: number;
   /** 「★＝まだ言えない・重点的に練習したい」印。プレイヤーの「★のみ」対象に使う。 */
   starred: boolean;
+  /** 'manual' = 本人が入れた例文 / 'ai' = 応用練習で採用した文。プレイヤーの対象の絞り込みに使う。 */
+  source: CompositionSource;
   created_at: string;
   updated_at: string;
 };
@@ -233,7 +238,10 @@ export type Database = {
         CompositionCourse,
         'id' | 'description' | 'created_at' | 'updated_at'
       >;
-      compositions: Table<Composition, 'id' | 'sort_order' | 'starred' | 'created_at' | 'updated_at'>;
+      compositions: Table<
+        Composition,
+        'id' | 'sort_order' | 'starred' | 'source' | 'created_at' | 'updated_at'
+      >;
       composition_logs: Table<CompositionLog, 'id' | 'course_id' | 'rep_count' | 'practiced_at'>;
       // duration_sec は生成列。Insert / Update に含めると Postgres が拒否するので渡さない。
       study_sessions: Table<

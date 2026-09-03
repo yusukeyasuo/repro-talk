@@ -224,15 +224,28 @@ URL は `watch?v=` / `youtu.be/` / `shorts/` / `embed/` / 生のID / プロト�
 - **★（重点マーク）**：各例文の行で ★ をトグルできる（プレイヤーのドリル中にも同じ ★ を切り替えられる＝後述）。★ は「**まだ言えない・重点的に練習したい**」印で、言えるようになったら外す。得意/不得意の永続ラベルではなく、練習対象を絞るためのフラグ。管理見出しに **★ の件数**を出す。状態は `compositions.starred` に持ち、トグルは新アクションを足さず `updateComposition`（`starred` を渡す）を再利用する
 - **CSV で一括登録**：1行 = `日本語,英語`。文にカンマ・引用符が入る前提で RFC4180 のクオート（`"..."`）を解し、**タブ区切り**（スプレッドシートからの貼り付け）も受ける。ヘッダー行は任意。既存コースへ追記する。パーサ本体は独り言のお題と共有（`src/lib/two-column-paste.ts`）
 
+**応用練習**（`POST /api/ai/composition-ideas`）
+
+同じ例文を繰り返すと**その文ごと丸暗記**してしまい、型として応用が効かない。コース内の表現を組み替えた問題を AI に作らせ、型のまま使えるかを試す導線。
+
+- コース画面の「応用練習」から、**問題の数**（5/10/20）と**使いたい場面**（任意・200字まで）を渡して生成する。場面が空なら職種を選ばない一般的な仕事の場面になる。`profiles.why_text`（英語の先に理解したい何か）もプロンプトに渡し、その人の領域へ寄せる
+- **組み合わせる2〜3文はサーバ側で束ねてから AI に渡す**（`buildIdeaSeedGroups`）。コース全文を渡して AI に選ばせると、前の方の文・似た文ばかりを拾ってコースの後半が練習対象にならない。シャッフルした池を順に食い潰す形にして、**池を使い切るまで同じ文を2度使わない**（＝コース全体が均等に回る）。返答は group 番号でリクエスト側の束と対応づける
+- **ネタ元は本人が入れた例文（`source='manual'`）だけ**。応用文をさらに材料にすると AI が自分の出力を再加工していくことになり、コースの型からどんどん離れる。材料が2件未満のコースでは作れない（ボタンを無効化し、サーバも 400 で弾く）
+- **出てきたものをそのままコースへ入れる導線にはしない**。答えの英語はドリル中に「正解」として読み上げられるので、無検品の AI 出力を混ぜると誤った英語を覚える（発音の自動採点をしないのと同じ理由）。1件ずつチェックで採否を決め、**選んだものだけ**が登録される。判断材料として **元にした例文（英語）とねらい**を候補ごとに併記する
+- 採用した文は**新テーブルを作らず `compositions` に `source='ai'` で入る**。★・読み上げ・回数記録・中断と再開・編集・削除がすべて既存のまま効く。一覧では「応用」バッジと件数で見分ける
+- 登録した直後は、プレイヤーの**対象が「応用のみ」へ切り替わる**（作ってすぐ流せる状態にする）
+- 重複はプロンプトで避けさせたうえで、サーバでも `dedupeCompositionIdeas` で落とす（日本語・英語のどちらかが表記ゆれを畳んで一致するもの。似ているだけのものは残して採否を本人に委ねる）。「出し直す」は、その面で見せた候補と既存の応用文を `avoid` に積んで同じものを引かせない
+
 **流す（プレイヤー）** — スタート前に選ぶ
 
 | 設定 | 選択肢 | 既定 |
 |---|---|---|
-| 対象 | 全部 / ★のみ | 全部 |
+| 対象 | 全部 / ★のみ / 基本のみ / 応用のみ | 全部 |
 | 順番 | 登録順 / ランダム | 登録順 |
 | 切り替え速度 | 3〜15秒（任意の整数秒） | 10秒 |
 
 - **対象＝★のみ** を選ぶと、★を付けた例文だけを流す。「もう言えるものは飛ばし、言えないものに絞る」ための導線。選択肢には ★ の件数を併記し、★が **0件**のときは「★のみ」を選べない（＝スタートできず、先に ★ を付けるよう促す）
+- **対象＝基本のみ / 応用のみ** は出自（`compositions.source`）で絞る。「基本のみ」＝自分で入れた例文、「応用のみ」＝応用練習で採用した文。★との掛け合わせは持たない（組み合わせを増やしても、歩きながら押す画面では選ぶ手間が増えるだけ）。全部以外の3つは**件数を併記し、0件なら押せない**
 
 - 開始すると日本語が1文だけ大きく出る → 設定秒だけ「考える時間」（**残り時間ゲージ**が左詰めで減っていく／CSSアニメ） → **答え（英語）を表示し、同時に読み上げる** → 読み上げが終わったら**声に出して再現する間（約3秒・細いゲージで残りを表示）** → 次の文へ。これをコースの文章数だけ繰り返して1周で終わる。答え表示中はラベルを「読み上げ中…」→「声に出して再現」と出し分け、次に進むことを予告する
 - **画面の真ん中（本体エリア）のタップは一時停止／再開**、**送りはフッターのボタンだけ**が担う。歩きながら片手で押す前提だと、一番大きい当たり判定を「止める」に割り当てたほうが役に立つ（送りは待っていれば自動で進むが、止めるのは自分で押すしかない）。ヘッダーの一時停止ボタンは状態表示も兼ねて残す
@@ -281,7 +294,7 @@ Supabase / PostgreSQL。**全テーブル RLS 有効、`user_id = auth.uid()` �
 | `recordings` | `id`, `user_id`, `kind`, `clip_id`, `monologue_session_id`, `storage_path`, `mime_type`, `duration_sec`, `created_at` | 音声本体は Storage、ここはメタデータ。**独り言は保存せず、リプロダクションの聴き比べ録音のみ** |
 | `phrases` | `id`, `user_id`, `clip_id`, `text`, `meaning_ja`, `used_count`, `last_used_at`, `graduated_at`, `created_at` | **①と②を繋ぐ中核テーブル**。`graduated_at` が NULL の在庫だけが「今日使うフレーズ」に出る（初回使用で卒業） |
 | `composition_courses` | `id`, `user_id`, `title`, `description`, `created_at`, `updated_at` | 瞬間英作文のコース（例文の束） |
-| `compositions` | `id`, `user_id`, `course_id`, `ja`, `en`, `sort_order`, `starred`, `created_at`, `updated_at` | 例文1件（日本語＋英語）。`course_id` 内の `sort_order` 昇順が登録順。`course_id` は `on delete cascade`。`starred`（boolean・既定 false）は「★＝重点的に練習したい」印で、プレイヤーの「★のみ」対象に使う（`migration 0006`） |
+| `compositions` | `id`, `user_id`, `course_id`, `ja`, `en`, `sort_order`, `starred`, `source`, `created_at`, `updated_at` | 例文1件（日本語＋英語）。`course_id` 内の `sort_order` 昇順が登録順。`course_id` は `on delete cascade`。`starred`（boolean・既定 false）は「★＝重点的に練習したい」印で、プレイヤーの「★のみ」対象に使う（`migration 0006`）。`source`（`'manual'` / `'ai'`・既定 `'manual'`）は出自で、`'ai'` は応用練習で本人が採用した文。プレイヤーの「基本のみ / 応用のみ」に使う（`migration 0010`） |
 | `composition_logs` | `id`, `user_id`, `course_id`, `rep_count`, `practiced_at` | 読み上げ回数の記録（`practice_logs` と同型）。`course_id` は **`on delete set null`**（コースを消しても連続日数の履歴は巻き戻さない） |
 | `study_sessions` | `id`, `user_id`, `kind`, `started_at`, `ended_at`, `duration_sec`, `auto_closed`, `adjusted_at`, `created_at` | 学習時間の計測1回分（`migration 0008`）。`ended_at` が NULL なら計測中で、**`(user_id) where ended_at is null` の部分ユニーク索引で同時1本に限定**。`duration_sec` は `started_at`/`ended_at` からの**生成列**（書き込めない。直すときは時刻のほうを動かす＝矛盾した行を作れない）。`auto_closed` は押し忘れをアプリが 0分 で締めた印 |
 | `daily_activity`（ビュー） | `user_id`, `activity_date`, `reproduction_reps`, `monologue_sec`, `recording_sec`, `composition_reps`, `study_sec` | 継続トラッキング用。`security_invoker = on` で RLS を継承。**`study_sec` と `monologue_sec` は重なる**（独り言も学習時間の計測に乗る）ので、表示でも集計でも足し合わせない |
@@ -328,6 +341,7 @@ type Annotation = {
 | `POST /api/ai/monologue-feedback` | `ja_memo`, `topic` | `suggestions[{text, meaning_ja, examples[]}]` | `medium` | 8000 |
 | `POST /api/ai/topic-ideas` | `direction`(方向性), `count`(10/20/30), `avoid?`(もう見た候補) | `topics[{title_en, title_ja, why_ja}]` | `medium` | 8000 / 16000 |
 | `POST /api/ai/grammar` | `ja`, `en`（例文1件） | `headline`, `build`(組み立ての順番), `points[{focus, label, detail}]`, `pitfalls[{wrong, why}]`, `variations[{en, ja}]` | `high` | 16000 |
+| `POST /api/ai/composition-ideas` | `courseId`, `count`(5/10/20), `situation?`(使いたい場面), `avoid?`(もう見た候補) | `ideas[{ja, en, whyJa, sources[{ja, en}]}]` | `high` | 16000 / 20000 |
 
 **共通の約束事**
 
@@ -384,6 +398,8 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | `YT.Player` は渡した要素を iframe で置き換える | React の ref を直接渡さず使い捨ての子要素を挟む。iframe は 640×360 固定なので `[&>iframe]:size-full` で埋める |
 | モバイルは `playsinline` 必須 | 初回再生はユーザー操作起点でないとブロックされる |
 | サーバー側の文字起こし自動取得は不安定（IPブロック・CORS） | 取得はユーザーのブラウザで動くブックマークレット。手動コピペもフォールバックに残す |
+| **`runStructured()` は非ストリーミングなので `max_tokens` は 21,333 が上限** | SDK は `60 * 60 * max_tokens / 128000` で所要時間を見積もり、10分を超える見込みだと**リクエストを投げる前に**例外にする（`Streaming is required for operations that may take longer than 10 minutes`）。件数の多い生成でも `max_tokens` はここを超えない（`composition-ideas` は 20000 で頭打ち） |
+| **1問あたりの日本語は放っておくと2文になる** | 応用練習で20問中2問が「〜です。〜します。」の2文になった。「1文」だけでは足りず、**文中に「。」「？」「！」を置かない**と定義したうえで、疑問文＋主張のように融合できない組み合わせは**片方の型を捨てる**と逃げ道を書いて解消（読点で無理に繋ぐと日本語のほうが壊れる） |
 | `font-mono`（Geist Mono）に日本語グリフがない | 「3回」「1日」「30秒」の単位は `font-mono` の外に出す。中に入れると豆腐になる |
 | 選択範囲はボタンの mousedown で解除される | 注釈ツールバーは `onMouseDown` で `preventDefault()` する |
 | 音声読み上げ（TTS）はブラウザ差が大きい | `speechSynthesis`。声は非同期ロード（`onvoiceschanged` を待つ）。iOS Safari は発話にユーザー操作の連鎖が要る（スタート時に無音発話で解錠）。非対応環境は固定秒送りにフォールバック |
@@ -428,7 +444,9 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | **ドリル中の文法解説**（Playwright・ログイン状態・`/api/ai/grammar`） | 考える時間中はボタンが `disabled`、答え表示後に押すと一時停止して面が開き、解説が出るまで文が送られないことを確認。閉じたあとも8秒待って同じ文・「一時停止中」のままで、勝手に再開しないことを確認。スマホ幅（390px）で横スクロールが出ないことを確認 |
 | **文法解説のプロンプト出力**（`claude-opus-5` / `effort: high` を直接2文で実行） | 「彼にそのことを話しておけばよかった／I should have told him about it.」「駅に着いたら電話するね／I'll give you a call when I get to the station.」で、組み立ての順番・迷いどころ（should have + 過去分詞、時の副詞節の現在形など）・やりがちな誤り・応用例文2つが揃うこと、`focus` が英文の逐語部分文字列になっていることを確認 |
 | **お題のAI提案**（Playwright・ログイン状態・`/api/ai/topic-ideas`） | 「仕事で使いそうなテーマ」＋30件で候補が30件並び、既存30シード（`My job, explained simply` 等）と重ならないことを確認。ラベルのテキスト側とチェックボックス本体のどちらを押しても選択が切り替わり、フッターの件数が追随することを確認（30→28）。2件だけ選んで登録すると「自分のお題 2 件」になり一覧に出ることを確認。**出し直す**で、直前に見せた10件と1件も重ならない別の10件（登録済みの2件も除外）が返ることを確認。スマホ幅（375px）で本文だけがスクロールし「登録」ボタンが常に画面内に残ることを確認 |
-| ビルド / Lint / ユニットテスト78件 | 全通過（`next build` で `/api/ai/naturalize` 含む全ルート生成、`tsc --noEmit`・eslint クリーン） |
+| **応用練習**（Playwright・ログイン状態・`/api/ai/composition-ideas`） | 30文のコース（MTG頻出フレーズ）で場面「海外チームとの開発進捗のすり合わせ」＋5問を生成。5件とも**元の2〜3文の型が残ったまま主語・目的語・時制が入れ替わった**自然な英語で返ることを確認（例: `It's easier to 〜 if we 〜` ＋ `Honestly, I feel 〜` → `Honestly, I feel it's easier to merge if we split the review.`）。候補ごとに元にした例文とねらいが並ぶこと、5件を採用すると `compositions` に `source='ai'` で5行入り（`sort_order` は末尾へ 31〜35）、一覧に「応用」バッジと件数が出ることを確認。登録直後に対象が「応用のみ 5」へ切り替わり、スタートすると **1 / 5**（応用だけ）で流れ、1文ごとに `composition_logs` へ `rep_count:1` が入ることを確認 |
+| **応用練習の件数と1文ルール**（Playwright・ログイン状態） | 20問は **60〜75秒**で20件返り、重複落としでも1件も減らないことを確認（`maxDuration = 300` の範囲内）。当初 `max_tokens: 32000` で `Streaming is required 〜` が出たため 20000 に下げて解消。**20問中2問が日本語2文**だった件は、プロンプトで「1文」を定義し直して 10問中 0 件・英語も 0 件になることを確認（2回連続） |
+| ビルド / Lint / ユニットテスト88件 | 全通過（`next build` で `/api/ai/composition-ideas` 含む全ルート生成、`tsc --noEmit`・eslint クリーン） |
 
 ### 未検証
 
@@ -437,6 +455,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | **学習時間・週の目標の本番反映**（`migration 0008` / `0009` のクラウド Supabase 適用） | ローカルには適用・検証済みだが本番へは未適用（CI のマイグレーション→デプロイ順で流す） |
 | **週の目標のペース目盛り**（進捗バー上の縦線） | 検証日が日曜（週の最終日＝ペース100%）で、目盛りを出す条件（`0 < ペース% < 100`）に入らなかったため画面では未確認。`paceSec` の値はユニットテスト済み |
 | **自作テキストのリプロダクションの通しUI**（テキスト登録→任意でAI推敲→文単位で再現→回数記録／聴き比べ／マーキング） | 実装済み。**ブラウザ通し（Playwright）は未実施**。実機の `<audio>` 解錠・TTS 再生・「言えた」で `practice_logs` 加算・reanchor（推敲差し替え時）を通しで確認する必要がある |
+| **応用練習の本番反映**（`migration 0010` のクラウド Supabase 適用） | ローカルには適用・検証済みだが本番へは未適用（CI のマイグレーション→デプロイ順で流す）。既存行は `source='manual'` で埋まるので、当てるだけで従来どおり動く |
 | **自作テキストの本番反映**（`migration 0007` のクラウド Supabase 適用） | ローカルには適用・検証済みだが本番へは未適用（CI のマイグレーション→デプロイ順で流す）。`/api/ai/naturalize` は `ANTHROPIC_API_KEY`、TTS は `OPENAI_API_KEY` 前提 |
 | **例文の★の本番反映**（`migration 0006` のクラウド Supabase 適用） | ローカルでは適用・動作確認済みだが、本番へは未適用（0006 を CI のマイグレーション→デプロイ順で流す必要がある） |
 | **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
