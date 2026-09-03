@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { AUTH_REQUIRED, type ActionResult } from '@/lib/action-result';
 import type { CompositionDraft } from '@/lib/composition-csv';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
+import type { CompositionSource } from '@/types/database';
 
 // --- コース --------------------------------------------------------------
 
@@ -184,10 +185,15 @@ export async function deleteComposition(input: {
   return { ok: true, data: undefined };
 }
 
-/** CSV/TSV から起こした複数行を、末尾へまとめて追記する。 */
+/**
+ * 複数行を末尾へまとめて追記する。CSV/TSV の一括登録と、応用練習で採用した文の
+ * 両方がここを通る。source は出自の印で、既定は本人が入れた例文（'manual'）。
+ */
 export async function importCompositions(input: {
   courseId: string;
   rows: CompositionDraft[];
+  /** 'ai' は応用練習（AI 生成）で本人が採用した文。プレイヤーの「応用のみ」で絞れる。 */
+  source?: CompositionSource;
 }): Promise<ActionResult<{ added: number }>> {
   const user = await getCurrentUser();
   if (!user) return AUTH_REQUIRED;
@@ -196,6 +202,9 @@ export async function importCompositions(input: {
     .map((r) => ({ ja: r.ja.trim(), en: r.en.trim() }))
     .filter((r) => r.ja && r.en);
   if (rows.length === 0) return { ok: false, error: '登録できる行がありませんでした' };
+
+  // 'use server' の export は公開エンドポイントなので、列挙外の値は受けない
+  const source: CompositionSource = input.source === 'ai' ? 'ai' : 'manual';
 
   const supabase = await createClient();
   if (!(await ownsCourse(supabase, input.courseId))) {
@@ -208,6 +217,7 @@ export async function importCompositions(input: {
     course_id: input.courseId,
     ja: r.ja,
     en: r.en,
+    source,
     sort_order: base + i + 1,
   }));
 

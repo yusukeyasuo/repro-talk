@@ -9,6 +9,11 @@ import {
   weekStartJst,
 } from '../src/lib/activity.ts';
 import { parseCompositionsCsv } from '../src/lib/composition-csv.ts';
+import {
+  buildIdeaSeedGroups,
+  dedupeCompositionIdeas,
+  type CompositionSeed,
+} from '../src/lib/composition-ideas.ts';
 import { parseMonologueTopicsCsv } from '../src/lib/monologue-topic-csv.ts';
 import { dedupeTopicSuggestions, normalizeTopicKey } from '../src/lib/topic-suggestions.ts';
 import { ttsCacheKey } from '../src/lib/tts-cache.ts';
@@ -666,5 +671,105 @@ describe('dedupeTopicSuggestions', () => {
       [{ titleEn: 'Already shown', titleJa: '' }],
     );
     assert.equal(kept.length, 1);
+  });
+});
+
+describe('composition-ideas: 応用練習の材料を束ねる', () => {
+  const pool = (n: number): CompositionSeed[] =>
+    Array.from({ length: n }, (_, i) => ({ id: `id-${i}`, ja: `日本語${i}`, en: `English ${i}` }));
+
+  // rng を差して決定的にする（本番は Math.random）。0 なら束は2文、0.9 なら3文になる。
+  const rngPairs = () => 0;
+  const rngTriples = () => 0.9;
+
+  it('例文が2件未満だと組み合わせようがないので空を返す', () => {
+    assert.deepEqual(buildIdeaSeedGroups(pool(1), 5, rngPairs), []);
+    assert.deepEqual(buildIdeaSeedGroups(pool(0), 5, rngPairs), []);
+  });
+
+  it('件数が0以下なら空を返す', () => {
+    assert.deepEqual(buildIdeaSeedGroups(pool(10), 0, rngPairs), []);
+  });
+
+  it('求めた数だけ、2〜3文の束を作る', () => {
+    const groups = buildIdeaSeedGroups(pool(10), 4, rngTriples);
+    assert.equal(groups.length, 4);
+    assert.deepEqual(
+      groups.map((g) => g.group),
+      [1, 2, 3, 4],
+    );
+    for (const group of groups) {
+      assert.ok(group.items.length >= 2 && group.items.length <= 3);
+      // 同じ束に同じ文を2度入れない
+      assert.equal(new Set(group.items.map((i) => i.id)).size, group.items.length);
+    }
+  });
+
+  it('池を使い切るまで同じ文を2度使わない（コース全体が均等に回る）', () => {
+    // 6件から2文 × 3束 = ちょうど1周ぶん
+    const groups = buildIdeaSeedGroups(pool(6), 3, rngPairs);
+    const used = groups.flatMap((g) => g.items.map((i) => i.id));
+    assert.equal(used.length, 6);
+    assert.equal(new Set(used).size, 6);
+  });
+
+  it('池が2件しかなければ、束は常に2文になる（3文を要求しても増やせない）', () => {
+    const groups = buildIdeaSeedGroups(pool(2), 3, rngTriples);
+    assert.deepEqual(
+      groups.map((g) => g.items.length),
+      [2, 2, 2],
+    );
+  });
+});
+
+describe('composition-ideas: 応用問題の候補から重複を落とす', () => {
+  const idea = (ja: string, en: string, whyJa = 'ねらい') => ({ ja, en, whyJa, sourceIds: ['s1'] });
+
+  it('コースに既にある例文と日本語が一致するものは落とす', () => {
+    const kept = dedupeCompositionIdeas(
+      [idea('来週までに見積もりを出します。', 'I will send you the quote by next week.')],
+      [{ ja: '来週までに見積もりを出します。', en: 'まったく違う英語' }],
+    );
+    assert.deepEqual(kept, []);
+  });
+
+  it('英語が一致すれば、記号や大文字小文字が違っても落とす', () => {
+    const kept = dedupeCompositionIdeas(
+      [idea('別の日本語です。', 'I will send you the quote by next week.')],
+      [{ ja: 'ぜんぜん違う日本語', en: 'I WILL SEND YOU THE QUOTE BY NEXT WEEK!' }],
+    );
+    assert.deepEqual(kept, []);
+  });
+
+  it('候補どうしの重複は後から来たほうを落とす', () => {
+    const kept = dedupeCompositionIdeas(
+      [
+        idea('確認してから返します。', 'Let me check and get back to you.'),
+        idea('確認してから返します。', 'I will check and get back to you.'),
+        idea('別の問題です。', 'Let me check and get back to you.'),
+        idea('残る問題です。', 'Could you take a look when you have time?'),
+      ],
+      [],
+    );
+    assert.deepEqual(
+      kept.map((k) => k.ja),
+      ['確認してから返します。', '残る問題です。'],
+    );
+  });
+
+  it('日本語か英語が欠けた候補は登録できないので落とし、残るものは trim する', () => {
+    const kept = dedupeCompositionIdeas(
+      [idea('日本語だけ', ''), idea('  ', 'English only'), idea(' 残る ', ' Kept as is ', ' 理由 ')],
+      [],
+    );
+    assert.deepEqual(kept, [{ ja: '残る', en: 'Kept as is', whyJa: '理由', sourceIds: ['s1'] }]);
+  });
+
+  it('元にした例文の id は保ったまま返す（画面で元の文を出すため）', () => {
+    const kept = dedupeCompositionIdeas(
+      [{ ja: '新しい問題', en: 'A new one', whyJa: '', sourceIds: ['a', 'b'] }],
+      [],
+    );
+    assert.deepEqual(kept[0].sourceIds, ['a', 'b']);
   });
 });

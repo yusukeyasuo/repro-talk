@@ -1,6 +1,6 @@
 'use client';
 
-import { Pencil, Plus, Square, Star, Trash2, Upload, Volume2 } from 'lucide-react';
+import { Pencil, Plus, Sparkles, Square, Star, Trash2, Upload, Volume2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -43,6 +43,8 @@ export function CompositionManager({
 }) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const starredCount = compositions.reduce((n, c) => (starredIds.has(c.id) ? n + 1 : n), 0);
+  // 応用練習で採用した文。混ざっていることが一覧で分かるように件数も出す。
+  const appliedCount = compositions.reduce((n, c) => (c.source === 'ai' ? n + 1 : n), 0);
 
   // 一覧を離れる（＝プレイヤーへ切替 / 別ページ）ときは読み上げを止める
   useEffect(() => {
@@ -75,6 +77,12 @@ export function CompositionManager({
             <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground">
               <Star className="size-3.5 fill-amber-500 text-amber-500" />
               <span className="font-mono tabular-nums">{starredCount}</span> 件
+            </span>
+          )}
+          {appliedCount > 0 && (
+            <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground">
+              <Sparkles className="size-3.5" />
+              応用 <span className="font-mono tabular-nums">{appliedCount}</span> 件
             </span>
           )}
         </h2>
@@ -303,6 +311,14 @@ function CompositionRow({
       <div className="min-w-0 flex-1">
         <p className="text-sm">{composition.ja}</p>
         <p className="mt-0.5 font-mono text-xs text-muted-foreground">{composition.en}</p>
+        {/* AI が作って自分が採用した文。元の例文と見分けが付くようにしておく
+            （直すべきはこちら、という判断がすぐ付く） */}
+        {composition.source === 'ai' && (
+          <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <Sparkles className="size-3" />
+            応用
+          </p>
+        )}
       </div>
       <Button
         variant="ghost"
