@@ -28,11 +28,13 @@ import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { extensionForMimeType, useRecorder, type RecordedClip } from '@/hooks/use-recorder';
 import { reanchorAnnotations } from '@/lib/annotation-anchor';
+import { reanchorPronunciations } from '@/lib/pronunciation-anchor';
 import { createClient } from '@/lib/supabase/client';
 import { splitSentences } from '@/lib/transcript';
 import { formatSeconds } from '@/lib/youtube';
 import { normalizeAnnotations, type Annotation } from '@/types/annotation';
 import type { Clip, Material, StudySession } from '@/types/database';
+import { normalizePronunciations, type Pronunciation } from '@/types/pronunciation';
 
 const RATES = [0.5, 0.75, 1] as const;
 
@@ -60,6 +62,7 @@ export function Workspace({ clip, material, userId, running }: Props) {
   const [editingTranscript, setEditingTranscript] = useState(!clip.transcript);
   const [translation, setTranslation] = useState(clip.translation_ja ?? '');
   const [annotations, setAnnotations] = useState<Annotation[]>(clip.annotations ?? []);
+  const [pronunciations, setPronunciations] = useState<Pronunciation[]>(clip.ipa ?? []);
   const [memo, setMemo] = useState(clip.memo ?? '');
 
   // 自作テキストは文単位で回す。オフセット付きのまま持ち、記号をその文だけに絞るのに使う。
@@ -84,6 +87,7 @@ export function Workspace({ clip, material, userId, running }: Props) {
   const [recorded, setRecorded] = useState<RecordedClip | null>(null);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [generatingIpa, setGeneratingIpa] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [pending, startTransition] = useTransition();
@@ -247,6 +251,36 @@ export function Workspace({ clip, material, userId, running }: Props) {
     }
   }
 
+  // 語ごとの発音記号を引く。音の記号（annotate）とは別の呼び出しにして、
+  // 発音記号が欲しいだけのときに手で付けた記号を上書きしないようにする。
+  async function generateIpa() {
+    if (!transcript || generatingIpa) return;
+    setGeneratingIpa(true);
+    try {
+      const res = await fetch('/api/ai/ipa', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ transcript }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error ?? '発音記号を作れませんでした');
+        return;
+      }
+      const next = normalizePronunciations(json.pronunciations, transcript.length);
+      if (next.length === 0) {
+        toast.error('発音記号を作れませんでした');
+        return;
+      }
+      setPronunciations(next);
+      setDirty(true);
+    } catch {
+      toast.error('通信に失敗しました');
+    } finally {
+      setGeneratingIpa(false);
+    }
+  }
+
   // 自作テキストを「完成された英語」に整える（任意）。採用すると transcript を差し替え、
   // 記号は surface で新テキストへ貼り直し、元文は source_text に残す。
   async function naturalize() {
@@ -277,11 +311,13 @@ export function Workspace({ clip, material, userId, running }: Props) {
     const next = suggestion.naturalized;
     const original = transcript;
     const { annotations: reanchored, dropped } = reanchorAnnotations(annotations, transcript, next);
+    const movedIpa = reanchorPronunciations(pronunciations, transcript, next);
     startTransition(async () => {
       const result = await updateClip({
         id: clip.id,
         transcript: next,
         annotations: reanchored,
+        pronunciations: movedIpa,
         translationJa: null,
         sourceText: original,
       });
@@ -291,6 +327,7 @@ export function Workspace({ clip, material, userId, running }: Props) {
       }
       setTranscript(next);
       setAnnotations(reanchored);
+      setPronunciations(movedIpa);
       setTranslation('');
       setSuggestion(null);
       setSentenceIndex(0);
@@ -311,6 +348,7 @@ export function Workspace({ clip, material, userId, running }: Props) {
       transcript,
       translationJa: translation || null,
       annotations,
+      pronunciations,
       memo: memo || null,
     });
     if (!result.ok) {
@@ -320,7 +358,7 @@ export function Workspace({ clip, material, userId, running }: Props) {
     }
     setDirty(false);
     setSaveState('saved');
-  }, [clip.id, transcript, translation, annotations, memo]);
+  }, [clip.id, transcript, translation, annotations, pronunciations, memo]);
 
   // dirty になったら debounce して自動保存（スクリプト編集中は別導線なので除く）
   useEffect(() => {
@@ -346,11 +384,14 @@ export function Workspace({ clip, material, userId, running }: Props) {
     // スクリプトが変わっても、記号は surface で新テキストへ貼り直す。
     // 文が消えた記号だけ落とす（全消しにはしない）。和訳は全体依存なので破棄する。
     const { annotations: reanchored, dropped } = reanchorAnnotations(annotations, transcript, next);
+    // 発音記号は語に紐づくので、位置さえ移せればそのまま使える（消えた語だけ落ちる）
+    const movedIpa = reanchorPronunciations(pronunciations, transcript, next);
     startTransition(async () => {
       const result = await updateClip({
         id: clip.id,
         transcript: next,
         annotations: reanchored,
+        pronunciations: movedIpa,
         translationJa: null,
       });
       if (!result.ok) {
@@ -359,6 +400,7 @@ export function Workspace({ clip, material, userId, running }: Props) {
       }
       setTranscript(next);
       setAnnotations(reanchored);
+      setPronunciations(movedIpa);
       setTranslation('');
       setEditingTranscript(false);
       if (isText) setSentenceIndex(0);
@@ -430,6 +472,9 @@ export function Workspace({ clip, material, userId, running }: Props) {
             sentences={sentences}
             transcript={transcript}
             annotations={annotations}
+            pronunciations={pronunciations}
+            onGeneratePronunciations={() => void generateIpa()}
+            generatingPronunciations={generatingIpa}
             index={currentIndex}
             rate={rate}
             onIndexChange={(i) => {

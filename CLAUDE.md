@@ -49,7 +49,7 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 ## 主要な構造
 
 ```
-supabase/migrations/     0001 スキーマ+RLS+Storage / 0002 お題30件 / 0008 学習時間の計測 / 0009 週の目標
+supabase/migrations/     0001 スキーマ+RLS+Storage / 0002 お題30件 / 0008 学習時間の計測 / 0009 週の目標 / 0010 発音記号
 src/proxy.ts             Supabase セッション更新 + 未ログインを /login へ（旧 middleware.ts）
 src/app/(app)/           認証必須のページ群
 src/app/api/ai/*         Claude API を叩く Route Handler（proxy の matcher 対象外なので各自で認証）
@@ -78,6 +78,7 @@ src/lib/study-server.ts  学習時間のサーバ読み取り（Server Action �
 
 ## 設計上の注意
 
+- **発音記号（`clips.ipa`）も transcript の文字インデックス参照**。語をキーにした辞書にはしない（同じ語が何度も出るうえ read / live を取り違える）。AI には語＋IPA を出現順に返させ、サーバで単語に切って前から突き合わせる（`resolveAiPronunciations`）。生成は `/api/ai/ipa` として annotate とは**別の呼び出し**にする（発音記号が欲しいだけのときに、手で付けた記号を annotate が丸ごと差し替えてしまわないように）。表示は練習中の1文カードだけ・既定は非表示
 - **annotations は transcript の文字インデックス参照**。transcript を編集したら、覆っていた部分文字列で新テキストへ貼り直す（`reanchorAnnotations`、`src/lib/annotation-anchor.ts`）。消えた記号だけ落とす。機械的なオフセット追従はしない
 - **AI 解析（annotate）は quote＋occurrence を返させ、サーバ側で文字列照合してオフセットを復元する**（`resolveAiAnnotations`）。LLM は整数オフセットが不安定なので index は信用しない。最後に `normalizeAnnotations()` を最終防波堤として必ず通す
 - リプロダクション回数は「1回再生して止める→**言えた**」のタップで数える（聴くだけ・ループは数えない）。**独り言の録音音声は保存しない**（時間だけ記録）。フレーズは**初回使用で卒業**して「今日使うフレーズ」から外れる

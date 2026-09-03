@@ -1,4 +1,5 @@
 import type { Annotation } from './annotation';
+import type { Pronunciation } from './pronunciation';
 
 export type MaterialLevel = 1 | 2 | 3 | 4;
 export type RecordingKind = 'reproduction' | 'monologue';
@@ -51,6 +52,8 @@ export type Clip = {
   transcript: string;
   translation_ja: string | null;
   annotations: Annotation[];
+  /** 語ごとの発音記号。空配列＝未生成（本人が「発音記号」を出したときに作る） */
+  ipa: Pronunciation[];
   memo: string | null;
   /** 'youtube' = 動画クリップ / 'text' = 自作テキスト */
   source: ClipSource;
@@ -202,6 +205,7 @@ export type Database = {
         | 'transcript'
         | 'translation_ja'
         | 'annotations'
+        | 'ipa'
         | 'memo'
         | 'source'
         | 'source_text'
