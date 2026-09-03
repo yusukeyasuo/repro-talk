@@ -296,7 +296,7 @@ Supabase / PostgreSQL。**全テーブル RLS 有効、`user_id = auth.uid()` �
 | `recordings` | `id`, `user_id`, `kind`, `clip_id`, `monologue_session_id`, `storage_path`, `mime_type`, `duration_sec`, `created_at` | 音声本体は Storage、ここはメタデータ。**独り言は保存せず、リプロダクションの聴き比べ録音のみ** |
 | `phrases` | `id`, `user_id`, `clip_id`, `text`, `meaning_ja`, `used_count`, `last_used_at`, `graduated_at`, `created_at` | **①と②を繋ぐ中核テーブル**。`graduated_at` が NULL の在庫だけが「今日使うフレーズ」に出る（初回使用で卒業） |
 | `composition_courses` | `id`, `user_id`, `title`, `description`, `created_at`, `updated_at` | 瞬間英作文のコース（例文の束） |
-| `compositions` | `id`, `user_id`, `course_id`, `ja`, `en`, `sort_order`, `starred`, `source`, `created_at`, `updated_at` | 例文1件（日本語＋英語）。`course_id` 内の `sort_order` 昇順が登録順。`course_id` は `on delete cascade`。`starred`（boolean・既定 false）は「★＝重点的に練習したい」印で、プレイヤーの「★のみ」対象に使う（`migration 0006`）。`source`（`'manual'` / `'ai'`・既定 `'manual'`）は出自で、`'ai'` は応用練習で本人が採用した文。プレイヤーの「基本のみ / 応用のみ」に使う（`migration 0010`） |
+| `compositions` | `id`, `user_id`, `course_id`, `ja`, `en`, `sort_order`, `starred`, `source`, `created_at`, `updated_at` | 例文1件（日本語＋英語）。`course_id` 内の `sort_order` 昇順が登録順。`course_id` は `on delete cascade`。`starred`（boolean・既定 false）は「★＝重点的に練習したい」印で、プレイヤーの「★のみ」対象に使う（`migration 0006`）。`source`（`'manual'` / `'ai'`・既定 `'manual'`）は出自で、`'ai'` は応用練習で本人が採用した文。プレイヤーの「基本のみ / 応用のみ」に使う（`migration 0011`） |
 | `composition_logs` | `id`, `user_id`, `course_id`, `rep_count`, `practiced_at` | 読み上げ回数の記録（`practice_logs` と同型）。`course_id` は **`on delete set null`**（コースを消しても連続日数の履歴は巻き戻さない） |
 | `study_sessions` | `id`, `user_id`, `kind`, `started_at`, `ended_at`, `duration_sec`, `auto_closed`, `adjusted_at`, `created_at` | 学習時間の計測1回分（`migration 0008`）。`ended_at` が NULL なら計測中で、**`(user_id) where ended_at is null` の部分ユニーク索引で同時1本に限定**。`duration_sec` は `started_at`/`ended_at` からの**生成列**（書き込めない。直すときは時刻のほうを動かす＝矛盾した行を作れない）。`auto_closed` は押し忘れをアプリが 0分 で締めた印 |
 | `daily_activity`（ビュー） | `user_id`, `activity_date`, `reproduction_reps`, `monologue_sec`, `recording_sec`, `composition_reps`, `study_sec` | 継続トラッキング用。`security_invoker = on` で RLS を継承。**`study_sec` と `monologue_sec` は重なる**（独り言も学習時間の計測に乗る）ので、表示でも集計でも足し合わせない |
@@ -306,6 +306,12 @@ Supabase / PostgreSQL。**全テーブル RLS 有効、`user_id = auth.uid()` �
 **`migration 0007`（自作テキストのリプロダクション）** — 新テーブルを増やさず `clips` を拡張する。`material_id`・`start_sec`・`end_sec` を **nullable** にし、`source text not null default 'youtube'`（`check (source in ('youtube','text'))`）と `source_text text` を足す。既存の `end_sec > 0` / `end_sec > start_sec` の制約は source 条件つきに置き換える：`check (source <> 'youtube' or (material_id is not null and start_sec is not null and end_sec is not null and start_sec >= 0 and end_sec > start_sec))`、および `check (source <> 'text' or material_id is null)`（テキストは動画を参照しない）。既存行は `source='youtube'` になり互換。RLS（`clips_all_own`）・関連する FK（`practice_logs`・`recordings`・`phrases` の `clip_id`）はそのまま両系統に効く。`Clip` 型は `material_id`/`start_sec`/`end_sec` が `string|null`/`number|null`、`source: 'youtube'|'text'`、`source_text: string|null` になり、ワークスペースの `material` prop は `source='text'` で無し。
 
 **`migration 0010`（発音記号）** — `clips` に `ipa jsonb not null default '[]'` を足す。中身は `{start, end, ipa}` の配列で、**annotations と同じく transcript の文字インデックス参照**。語をキーにした辞書にはしない（同じ語が何度も出てくるうえ、read / live のように文脈で読みが変わる語を取り違えるため）。annotations と列を分けるのは、annotations が本人の書き込み・`ipa` が辞書の読みで、消える条件も付け直す手間も違うから。
+
+**`migration 0011`（応用練習の出自）** — `compositions` に `source text not null default 'manual'`（`check (source in ('manual','ai'))`）を足す。応用練習で作った文は**新テーブルを作らず**ここに入れる（★・読み上げ・回数記録・中断と再開・編集・削除が既存のまま効くため）。既存行は `'manual'` で埋まるので、当てるだけで従来どおり動く。
+
+> **番号が 0010 ではなく 0011 なのは、一度ぶつけたから。** 発音記号と応用練習を別ブランチで並行して作り、どちらも「次は 0010」と判断したまま両方 main に入った。Supabase はファイル名の先頭を `supabase_migrations.schema_migrations` の**主キー**にするので、先にマージされた発音記号が `0010` を埋め、あとから来た応用練習の `supabase db push` が `duplicate key value violates unique constraint "schema_migrations_pkey"` で落ちた。`deploy-production.yml` はマイグレーション成功後にしか Vercel を叩かないため、**列だけでなく応用練習のコードごと本番に出なかった**。番号は各PR単体では正しく、**2本が揃って初めて壊れる**ので、`pr-checks.yml` の `migrations` ステップでディレクトリ全体の番号重複を見張っている。
+>
+> なお**ローカルDBは本番と逆の状態**になっている（ローカルには応用練習が `0010` として当たっており、発音記号は未適用）。リネーム後にローカルを合わせるときは `supabase migration up` ではなく **`supabase db reset`** で引き直す（up すると `column "source" already exists` で落ちる）。
 
 **Storage** — `recordings` バケット（非公開）。パスは `<user_id>/<kind>/<uuid>.<ext>`。
 `storage.foldername(name)[1] = auth.uid()` のポリシーで他人のフォルダに触れない。
@@ -460,12 +466,12 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | **学習時間・週の目標の本番反映**（`migration 0008` / `0009` のクラウド Supabase 適用） | ローカルには適用・検証済みだが本番へは未適用（CI のマイグレーション→デプロイ順で流す） |
 | **週の目標のペース目盛り**（進捗バー上の縦線） | 検証日が日曜（週の最終日＝ペース100%）で、目盛りを出す条件（`0 < ペース% < 100`）に入らなかったため画面では未確認。`paceSec` の値はユニットテスト済み |
 | **自作テキストのリプロダクションの通しUI**（テキスト登録→任意でAI推敲→文単位で再現→回数記録／聴き比べ／マーキング） | 実装済み。**ブラウザ通し（Playwright）は未実施**。実機の `<audio>` 解錠・TTS 再生・「言えた」で `practice_logs` 加算・reanchor（推敲差し替え時）を通しで確認する必要がある |
-| **応用練習の本番反映**（`migration 0010` のクラウド Supabase 適用） | ローカルには適用・検証済みだが本番へは未適用（CI のマイグレーション→デプロイ順で流す）。既存行は `source='manual'` で埋まるので、当てるだけで従来どおり動く |
+| **応用練習の本番反映**（`migration 0011` のクラウド Supabase 適用） | **一度失敗している。** `0010` を発音記号とぶつけて `supabase db push` が `schema_migrations_pkey` 違反で落ち、Vercel デプロイまで止まったため、列もコードも本番に出ていない（run #26）。`0011` へ採番し直したので、次の main への push で流れる想定。既存行は `source='manual'` で埋まるので、当てるだけで従来どおり動く |
 | **自作テキストの本番反映**（`migration 0007` のクラウド Supabase 適用） | ローカルには適用・検証済みだが本番へは未適用（CI のマイグレーション→デプロイ順で流す）。`/api/ai/naturalize` は `ANTHROPIC_API_KEY`、TTS は `OPENAI_API_KEY` 前提 |
 | **例文の★の本番反映**（`migration 0006` のクラウド Supabase 適用） | ローカルでは適用・動作確認済みだが、本番へは未適用（0006 を CI のマイグレーション→デプロイ順で流す必要がある） |
 | **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
 | **練習中の1文カードの記号表示**（音の記号を重ねる／発音記号の行） | 実装済み。`tsc`・eslint・ユニットテスト（`tokenizeWords` / `resolveAiPronunciations` / `reanchorPronunciations`）・`next build` は通過。**ブラウザ通しは未実施**で、記号を重ねたときの行間・スマホ幅での折り返しは実機で見る必要がある |
-| **発音記号の生成**（`POST /api/ai/ipa`・`migration 0010` の本番適用） | `ANTHROPIC_API_KEY` 未設定のため実行していない。語の突き合わせ（大文字小文字・記号つき・同じ語の複数出現・原文に無い語）はユニットテスト済みだが、**AI が語を漏れなく出現順に返すか・IPA の質**は実行して確かめる必要がある。`migration 0010` はローカルにも未適用 |
+| **発音記号の生成**（`POST /api/ai/ipa`・`migration 0010` の本番適用） | `ANTHROPIC_API_KEY` 未設定のため実行していない。語の突き合わせ（大文字小文字・記号つき・同じ語の複数出現・原文に無い語）はユニットテスト済みだが、**AI が語を漏れなく出現順に返すか・IPA の質**は実行して確かめる必要がある。`migration 0010` はローカルにも未適用（ローカルは `0010` を応用練習が先に取っているので、`supabase db reset` で引き直してから当てる） |
 | **録音の実機保存**（Storage アップロード＋メタデータ行） | ヘッドレスブラウザにマイクがないため |
 | 実機のモバイル（iOS / Android）での動作（特に iOS Safari の `<audio>` 実機解錠） | 未実施。ヘッドレス環境では実機の音声解錠を再現できない |
 
