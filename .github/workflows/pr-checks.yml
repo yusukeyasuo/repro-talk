@@ -3,7 +3,7 @@
 # 6インチの画面で差分を精読するのは無理なので、機械に検証させてからマージする。
 # main の ruleset でこのジョブを必須にしてあり、auto-merge はこれが緑になってから走る。
 #
-# 4つのチェックは1つでも落ちたら失敗するが、**途中で止めずに全部走らせる**。
+# 5つのチェックは1つでも落ちたら失敗するが、**途中で止めずに全部走らせる**。
 # スマホでは1往復が高くつく（待つ・小さい画面でログを読む）ため、
 # 「typecheck を直す → push → 待つ → 今度は lint が落ちる」を避けたい。
 name: PR checks
@@ -20,6 +20,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # マイグレーションの番号（ファイル名の先頭）が重複していないか。
+      # Supabase は先頭の数字を schema_migrations の主キーにするので、番号がぶつかると
+      # **マージして本番デプロイが走って初めて** 落ちる:
+      #   duplicate key value violates unique constraint "schema_migrations_pkey"
+      # deploy-production はそこで止まるので Vercel のデプロイまで道連れになり、
+      # 新しい列も新しいコードも本番に出ない（PR #32 と #33 で実際に起きた）。
+      # 各PR単体では番号は正しく、**2本が揃って初めて壊れる**ので、
+      # PR ごとにディレクトリ全体を見る。npm に依存しないので install の前に置く。
+      - name: migrations
+        id: migrations
+        continue-on-error: true
+        run: |
+          fail=0
+          for f in supabase/migrations/*.sql; do
+            case "$(basename "$f")" in
+              [0-9][0-9][0-9][0-9]_?*.sql) ;;
+              *) echo "::error file=$f::ファイル名を <4桁の番号>_<名前>.sql にしてください"; fail=1 ;;
+            esac
+          done
+          dupes=$(basename -a supabase/migrations/*.sql \
+            | sed -n 's/^\([0-9]\{4\}\)_.*\.sql$/\1/p' | sort | uniq -d)
+          for v in $dupes; do
+            echo "::error::マイグレーションの番号 $v が重複しています: $(echo supabase/migrations/"$v"_*.sql)"
+            fail=1
+          done
+          exit $fail
 
       # Vercel のビルドと同じ Node 24 に揃える（ここだけ古いと CI が通って
       # 本番ビルドで落ちる、という最悪の擦れ違いが起きる）。
@@ -61,12 +88,13 @@ jobs:
           OPENAI_API_KEY: dummy-openai-key
         run: npm run build
 
-      # 4つの結果を1画面にまとめる。GITHUB_STEP_SUMMARY はスマホの
+      # 5つの結果を1画面にまとめる。GITHUB_STEP_SUMMARY はスマホの
       # GitHub でも実行ページに表示されるので、ログを掘らずに済む。
       # 最後の判定式の終了コードが、このジョブ全体の合否になる。
       - name: summary
         if: always()
         env:
+          R_MIGRATIONS: ${{ steps.migrations.outcome }}
           R_TYPECHECK: ${{ steps.typecheck.outcome }}
           R_LINT: ${{ steps.lint.outcome }}
           R_TEST: ${{ steps.test.outcome }}
@@ -76,13 +104,15 @@ jobs:
           {
             echo '| チェック | 結果 |'
             echo '|---|---|'
+            echo "| migrations | $(mark "$R_MIGRATIONS") $R_MIGRATIONS |"
             echo "| typecheck | $(mark "$R_TYPECHECK") $R_TYPECHECK |"
             echo "| lint | $(mark "$R_LINT") $R_LINT |"
             echo "| test | $(mark "$R_TEST") $R_TEST |"
             echo "| build | $(mark "$R_BUILD") $R_BUILD |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          [ "$R_TYPECHECK" = success ] \
+          [ "$R_MIGRATIONS" = success ] \
+            && [ "$R_TYPECHECK" = success ] \
             && [ "$R_LINT" = success ] \
             && [ "$R_TEST" = success ] \
             && [ "$R_BUILD" = success ]

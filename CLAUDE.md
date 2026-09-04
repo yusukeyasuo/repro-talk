@@ -49,7 +49,7 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 ## 主要な構造
 
 ```
-supabase/migrations/     0001 スキーマ+RLS+Storage / 0002 お題30件 / 0008 学習時間の計測 / 0009 週の目標 / 0010 発音記号
+supabase/migrations/     0001 スキーマ+RLS+Storage / 0002 お題30件 / 0008 学習時間の計測 / 0009 週の目標 / 0010 発音記号 / 0011 応用練習の出自
 src/proxy.ts             Supabase セッション更新 + 未ログインを /login へ（旧 middleware.ts）
 src/app/(app)/           認証必須のページ群
 src/app/api/ai/*         Claude API を叩く Route Handler（proxy の matcher 対象外なので各自で認証）
