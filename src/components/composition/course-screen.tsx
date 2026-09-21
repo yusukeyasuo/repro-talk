@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 
 import { deleteCourse, updateComposition, updateCourse } from '@/app/actions/compositions';
 import { AppliedPracticeDialog } from '@/components/composition/applied-practice-dialog';
+import { CompositionJudgePlayer } from '@/components/composition/composition-judge-player';
 import { CompositionManager } from '@/components/composition/composition-manager';
 import { CompositionPlayer, type PlayProgress } from '@/components/composition/composition-player';
 import { useStudyGuard } from '@/components/study/study-guard';
@@ -31,8 +32,15 @@ import { cn } from '@/lib/utils';
 import type { Composition, CompositionCourse, StudySession } from '@/types/database';
 
 type PlayOrder = 'seq' | 'random';
+/** ドリルの種類。'memorize' = 答えを見て声に出す暗記 / 'judge' = 自分で英作文して AI に添削してもらう。 */
+type PlayMode = 'memorize' | 'judge';
 /** 流す対象。'manual' = 自分で入れた例文だけ / 'applied' = AI に作らせた応用だけ。 */
 type PlayTarget = 'all' | 'starred' | 'manual' | 'applied';
+
+const MODES: { value: PlayMode; label: string }[] = [
+  { value: 'memorize', label: '暗記' },
+  { value: 'judge', label: 'AI添削' },
+];
 
 const TARGETS: { value: PlayTarget; label: string }[] = [
   { value: 'all', label: '全部' },
@@ -83,6 +91,7 @@ export function CourseScreen({
   const router = useRouter();
   const { guard, dialog: studyGuardDialog } = useStudyGuard('composition', running);
   const [mode, setMode] = useState<'idle' | 'play'>('idle');
+  const [playMode, setPlayMode] = useState<PlayMode>('memorize');
   const [order, setOrder] = useState<PlayOrder>('seq');
   const [target, setTarget] = useState<PlayTarget>('all');
   const [intervalSec, setIntervalSec] = useState(DEFAULT_INTERVAL);
@@ -121,7 +130,13 @@ export function CourseScreen({
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (!raw) return;
-      const s = JSON.parse(raw) as { order?: string; target?: string; intervalSec?: number };
+      const s = JSON.parse(raw) as {
+        mode?: string;
+        order?: string;
+        target?: string;
+        intervalSec?: number;
+      };
+      if (s.mode === 'memorize' || s.mode === 'judge') setPlayMode(s.mode);
       if (s.order === 'seq' || s.order === 'random') setOrder(s.order);
       if (TARGETS.some((t) => t.value === s.target)) setTarget(s.target as PlayTarget);
       if (typeof s.intervalSec === 'number') {
@@ -157,8 +172,14 @@ export function CourseScreen({
   }, [course.id, compositions]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  function persistSettings(next: { order?: PlayOrder; target?: PlayTarget; intervalSec?: number }) {
+  function persistSettings(next: {
+    mode?: PlayMode;
+    order?: PlayOrder;
+    target?: PlayTarget;
+    intervalSec?: number;
+  }) {
     const merged = {
+      mode: next.mode ?? playMode,
       order: next.order ?? order,
       target: next.target ?? target,
       intervalSec: next.intervalSec ?? intervalSec,
@@ -280,14 +301,24 @@ export function CourseScreen({
     return (
       <>
         {studyGuardDialog}
-        <CompositionPlayer
-          courseId={course.id}
-          courseTitle={course.title}
-          sequence={run.sequence}
-          startIndex={run.startIndex}
-          intervalSec={intervalSec}
-          onExit={exitPlayer}
-        />
+        {playMode === 'judge' ? (
+          <CompositionJudgePlayer
+            courseId={course.id}
+            courseTitle={course.title}
+            sequence={run.sequence}
+            startIndex={run.startIndex}
+            onExit={exitPlayer}
+          />
+        ) : (
+          <CompositionPlayer
+            courseId={course.id}
+            courseTitle={course.title}
+            sequence={run.sequence}
+            startIndex={run.startIndex}
+            intervalSec={intervalSec}
+            onExit={exitPlayer}
+          />
+        )}
       </>
     );
   }
@@ -333,6 +364,33 @@ export function CourseScreen({
             </Button>
           </div>
         )}
+
+        <div className="space-y-1.5">
+          <Label>モード</Label>
+          <div className="grid grid-cols-2 gap-2">
+            {MODES.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                aria-pressed={playMode === m.value}
+                onClick={() => {
+                  setPlayMode(m.value);
+                  persistSettings({ mode: m.value });
+                }}
+                className={cn(
+                  'rounded-lg border p-3 text-sm transition-colors',
+                  playMode === m.value ? 'border-foreground bg-accent' : 'hover:bg-accent/50',
+                )}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            「暗記」は答えを見て声に出す練習。「AI添削」は自分で英文を書いて、AI
+            に自然さを見てもらう練習です。
+          </p>
+        </div>
 
         <div className="space-y-1.5">
           <Label>対象</Label>
@@ -391,6 +449,7 @@ export function CourseScreen({
           </div>
         </div>
 
+        {playMode === 'memorize' && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label htmlFor="interval">切り替え速度</Label>
@@ -416,6 +475,7 @@ export function CourseScreen({
             日本語が出てから答えを表示するまでの「考える時間」。声に出す余裕がある長さに。
           </p>
         </div>
+        )}
 
         <Button
           size="lg"
