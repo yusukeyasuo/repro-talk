@@ -3,7 +3,7 @@
 import { Pencil, Play, RotateCcw, Trash2, Volume2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { deleteCourse, updateComposition, updateCourse } from '@/app/actions/compositions';
@@ -260,25 +260,37 @@ export function CourseScreen({
     setMode('play');
   }
 
+  // 中断位置を localStorage に書く／端なら消す。退出（onExit）だけでなく、ドリル中の
+  // 進行（onProgress）でも同じ意味で使い回すため切り出す。画面ロックで終わることが多いので、
+  // 明示終了を待たずに毎回ここへ保存しておくと「続きから」が実際に効く。
+  // run は再生中は変わらない（開始と退出でしか変わらない）ので、ドリル中は saveProgress の
+  // 同一性が安定する＝onProgress として渡してもプレイヤーの effect を無用に再実行しない。
+  const saveProgress = useCallback(
+    (progress: PlayProgress) => {
+      const seq = run?.sequence ?? [];
+      if (progress.finished || progress.index >= seq.length || progress.index <= 0) {
+        // 1周し切った / 位置が端 → 続きは残さない
+        try {
+          localStorage.removeItem(progressKey(course.id));
+        } catch {
+          // 無視
+        }
+        setResume(null);
+      } else {
+        const saved: SavedProgress = { ids: seq.map((c) => c.id), index: progress.index };
+        try {
+          localStorage.setItem(progressKey(course.id), JSON.stringify(saved));
+        } catch {
+          // 無視
+        }
+        setResume(saved);
+      }
+    },
+    [run, course.id],
+  );
+
   function exitPlayer(progress: PlayProgress) {
-    const seq = run?.sequence ?? [];
-    if (progress.finished || progress.index >= seq.length || progress.index <= 0) {
-      // 1周し切った / 位置が端 → 続きは残さない
-      try {
-        localStorage.removeItem(progressKey(course.id));
-      } catch {
-        // 無視
-      }
-      setResume(null);
-    } else {
-      const saved: SavedProgress = { ids: seq.map((c) => c.id), index: progress.index };
-      try {
-        localStorage.setItem(progressKey(course.id), JSON.stringify(saved));
-      } catch {
-        // 無視
-      }
-      setResume(saved);
-    }
+    saveProgress(progress);
     setRun(null);
     setMode('idle');
     router.refresh(); // 回数・連続日数を更新
@@ -308,6 +320,7 @@ export function CourseScreen({
             sequence={run.sequence}
             startIndex={run.startIndex}
             onExit={exitPlayer}
+            onProgress={saveProgress}
           />
         ) : (
           <CompositionPlayer
@@ -317,6 +330,7 @@ export function CourseScreen({
             startIndex={run.startIndex}
             intervalSec={intervalSec}
             onExit={exitPlayer}
+            onProgress={saveProgress}
           />
         )}
       </>

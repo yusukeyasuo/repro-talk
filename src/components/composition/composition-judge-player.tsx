@@ -27,6 +27,12 @@ type Props = {
   startIndex: number;
   /** ×／完了で抜けるとき、次に再開すべき位置を渡す */
   onExit: (progress: PlayProgress) => void;
+  /**
+   * ドリル中に再開位置が動くたび（次へ・スキップ・戻る・採点完了）と、
+   * 画面を裏に回した／閉じたときに呼ぶ。歩きながら使うので明示終了を待たず、
+   * 毎回 localStorage へ書いておくことで「続きから」が実際に効く。
+   */
+  onProgress?: (progress: PlayProgress) => void;
 };
 
 /** 読み上げボタン。クリックの中で解錠してから読み上げる（iOS 対策）。 */
@@ -53,7 +59,14 @@ function SpeakButton({ text, label }: { text: string; label: string }) {
  * とは状態機械が別物（考える時間のタイマー・自動送りが無く、入力して待つユーザー主導）なので
  * 兄弟コンポーネントとして分けている。
  */
-export function CompositionJudgePlayer({ courseId, courseTitle, sequence, startIndex, onExit }: Props) {
+export function CompositionJudgePlayer({
+  courseId,
+  courseTitle,
+  sequence,
+  startIndex,
+  onExit,
+  onProgress,
+}: Props) {
   const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock();
 
   const total = sequence.length;
@@ -102,6 +115,32 @@ export function CompositionJudgePlayer({ courseId, courseTitle, sequence, startI
   useEffect(() => {
     if (phase === 'input' && !finished) textareaRef.current?.focus();
   }, [phase, finished, index]);
+
+  // 再開位置が動くたびに保存する（次へ・スキップ・戻る・採点完了）。exitNow と同じ式で
+  // 位置を出すので、明示終了で抜けたときと続きが一致する（採点済み＝次へ、未採点＝現在位置）。
+  useEffect(() => {
+    const next = finished ? total : submittedRef.current ? index + 1 : index;
+    onProgress?.({ index: next, finished });
+    // phase は「採点完了で done になった」瞬間を拾うための依存（式では submittedRef を見る）。
+  }, [index, phase, finished, total, onProgress]);
+
+  // 画面を裏に回した／閉じたときにも保存する。歩きながらのアプリでは終了ボタンを押さず
+  // ロックして終わることが多いので、ここが実際の「退出」になる。
+  useEffect(() => {
+    const flush = () => {
+      const next = finished ? total : submittedRef.current ? index + 1 : index;
+      onProgress?.({ index: next, finished });
+    };
+    const onVisibility = () => {
+      if (document.hidden) flush();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [index, finished, total, onProgress]);
 
   function submit() {
     if (submittingRef.current) return;
@@ -411,11 +450,25 @@ export function CompositionJudgePlayer({ courseId, courseTitle, sequence, startI
       {/* フッター */}
       {!finished && (
         <div className="flex flex-col gap-2 border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-          <p className="text-center text-xs text-muted-foreground sm:text-left">
-            {phase === 'result'
-              ? '自然さは自分の英文で見ています・参考解答と違ってもかまいません'
-              : '日本語を見て自分で英作文し、AI に自然さを見てもらいます'}
-          </p>
+          <div className="flex flex-col items-center gap-0.5 sm:items-start">
+            <p className="text-center text-xs text-muted-foreground sm:text-left">
+              {phase === 'result'
+                ? '自然さは自分の英文で見ています・参考解答と違ってもかまいません'
+                : '日本語を見て自分で英作文し、AI に自然さを見てもらいます'}
+            </p>
+            {/* 思いつかない文は採点せずに送れる。主役の「採点する」と競わないよう控えめに。
+                採点しない＝1回にも数えない（goNext は submittedRef を立てない）。 */}
+            {phase === 'input' && (
+              <Button
+                variant="link"
+                size="sm"
+                onClick={goNext}
+                className="h-auto p-0 text-xs font-normal text-muted-foreground"
+              >
+                スキップ（採点せずに次へ）
+              </Button>
+            )}
+          </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <Button
               variant="outline"
