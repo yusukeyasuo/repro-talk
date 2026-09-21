@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
+import type { User } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
+import { judgeAuth } from '@/lib/auth-session';
 import type { Database } from '@/types/database';
 
 export async function createClient() {
@@ -34,4 +36,27 @@ export async function getCurrentUser() {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
+}
+
+export type AuthState =
+  | { status: 'authenticated'; user: User }
+  | { status: 'unauthenticated' }
+  | { status: 'unverified' };
+
+/**
+ * ログイン画面へ飛ばすかどうかを決める側（レイアウト）のための読み取り。
+ *
+ * `getCurrentUser()` と違って「確認できなかった」（通信エラー・Supabase の一時障害）を
+ * `unverified` として分けて返す。セッションは生きているかもしれないので、追い出さない。
+ */
+export async function getAuthState(): Promise<AuthState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  const verdict = judgeAuth(Boolean(user), error);
+  if (verdict === 'authenticated' && user) return { status: 'authenticated', user };
+  return { status: verdict === 'authenticated' ? 'unauthenticated' : verdict };
 }

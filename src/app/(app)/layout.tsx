@@ -1,13 +1,16 @@
 import { redirect } from 'next/navigation';
 
+import { ConnectionLost } from '@/components/layout/connection-lost';
 import { BottomNav, TopNav } from '@/components/layout/nav';
 import { StudyBar } from '@/components/study/study-bar';
 import { getRunningStudySession } from '@/lib/study-server';
-import { getCurrentUser } from '@/lib/supabase/server';
+import { getAuthState } from '@/lib/supabase/server';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser();
-  if (!user) redirect('/login');
+  // 「未ログイン」だけログイン画面へ。通信が失敗しただけのときは追い出さない（proxy と同じ判定）。
+  const auth = await getAuthState();
+  if (auth.status === 'unauthenticated') redirect('/login');
+  if (auth.status === 'unverified') return <ConnectionLost />;
 
   // 計測中の1本。どのページにいても終了できるようにレイアウトで持つ。
   const running = await getRunningStudySession();
