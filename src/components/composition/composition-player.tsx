@@ -40,6 +40,11 @@ type Props = {
   intervalSec: number;
   /** ×／完了で抜けるとき、次に再開すべき位置を渡す */
   onExit: (progress: PlayProgress) => void;
+  /**
+   * 再開位置が動くたび（次へ・戻る・答え表示）と、画面を裏に回した／閉じたときに呼ぶ。
+   * 明示終了を待たず毎回 localStorage へ書いておくことで「続きから」が実際に効く。
+   */
+  onProgress?: (progress: PlayProgress) => void;
 };
 
 export function CompositionPlayer({
@@ -49,6 +54,7 @@ export function CompositionPlayer({
   startIndex,
   intervalSec,
   onExit,
+  onProgress,
 }: Props) {
   const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock();
 
@@ -185,6 +191,32 @@ export function CompositionPlayer({
     speaker.prefetch(sequence[index]?.en ?? '');
     speaker.prefetch(sequence[index + 1]?.en ?? '');
   }, [index, finished, total, sequence]);
+
+  // 再開位置が動くたびに保存する（次へ・戻る・答え表示）。exitNow と同じ式で位置を出すので、
+  // 明示終了で抜けたときと続きが一致する（答えを見た文＝次へ、まだなら現在位置）。
+  useEffect(() => {
+    const next = finished ? total : revealedRef.current ? index + 1 : index;
+    onProgress?.({ index: next, finished });
+    // revealed は「答えを見て done になった」瞬間を拾うための依存（式では revealedRef を見る）。
+  }, [index, revealed, finished, total, onProgress]);
+
+  // 画面を裏に回した／閉じたときにも保存する。歩きながらのアプリでは終了ボタンを押さず
+  // ロックして終わることが多いので、ここが実際の「退出」になる。
+  useEffect(() => {
+    const flush = () => {
+      const next = finished ? total : revealedRef.current ? index + 1 : index;
+      onProgress?.({ index: next, finished });
+    };
+    const onVisibility = () => {
+      if (document.hidden) flush();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [index, finished, total, onProgress]);
 
   // 1文サイクルの起点：新しい文（index 変化）ごとに考えるフェーズを張る。
   // 答えフェーズに入った後（revealedRef=true）は再アームしない＝この effect は文の開始だけを担う。
