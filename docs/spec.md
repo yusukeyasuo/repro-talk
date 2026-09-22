@@ -228,6 +228,15 @@ URL は `watch?v=` / `youtu.be/` / `shorts/` / `embed/` / 生のID / プロト�
 - 共通シード30件（`user_id is null`）は**読むだけ**。全員に共通の行なので編集・削除はできない（RLS が弾く）。文言を変えたいときは自分のお題として書き直す
 - お題を消しても過去の独り言の記録は残る（`monologue_sessions.topic_id` が `on delete set null`）
 
+### `/monologue/speech` ワードスピーチ（テキスト入力版）
+
+瞬間英作文（型）と独り言（0から作る）を繋ぐ導線。`/monologue` からリンクカードで入る。**まずはテキスト入力の MVP**で、声・音声認識（STT）は意図的に**対象外**（後の反復で足す）。判定するのは英作文の**内容**（語彙・文法・自然さ）で、**発音は採点しない**（原則どおり）。
+
+- **コースを選ぶ → AI が日本語ワードを選ぶ**（`POST /api/ai/speech-words`）。材料は**本人が入れた例文（`source='manual'`）だけ**をサーバ側で引き、シャッフルして頭から30文までに絞って渡す（`avoid` を渡すと出し直しで別のワードが返る）。**英語の訳語は出さない**（自分で英語を思い出すのが練習の肝）。材料が2件未満のコースはページの選択肢に出さない（サーバも 400 で弾く）
+- **30〜60秒のスピーチを英語で書く**（`<Textarea>`・4000字まで）。お題ワードは日本語で大きく出し（`font-mono` に入れない＝豆腐対策）、出典の日本語例文を控えめに添える。急かさないトーンのガイドを添え、空・短すぎる入力（`canSubmitSpeech`）は「採点してもらう」を無効にする。「他のワードで」で出し直せる
+- **AI が採点・添削する**（`POST /api/ai/monologue-speech-judge`, `effort:'high'`）。判定は瞬間英作文の添削と同じ Great/Good/Bad（色は `ratingMeta` を再利用）。お題ワードは1つずつ used/未used をチェックリストで出し、**used は寛容に**付ける（訳語一致でなくても概念が英語で表現できていれば使えたとみなす）。添削後のスピーチ全文は読み上げボタン付き（iOS 解錠はクリック内で `speaker.unlock()`）。別の言い方2〜3個も出す。結果から「もう一度」（同じお題で書き直す）／「新しいお題」（出し直し）
+- **机に向かう時間だけ `useStudyGuard('monologue', running)` で任意計測する**（独り言・コース画面と同じ）。声を出す独り言ではないので**録音・Wake Lock・音声保存は無い**。**この MVP では `monologue_sessions` に行を書かない**（声を出した時間を捏造しない＝「それらしい時間を作らない」）。スピーチ記録の保存は音声版の反復で入れる
+
 ### `/phrases` フレーズ・ストック
 
 リプロダクションで入れた表現。**在庫（未卒業）** と **身についた（卒業済み）** の2区分で表示。出典クリップへのリンク、削除。
@@ -374,6 +383,8 @@ type Annotation = {
 | `POST /api/ai/topic-ideas` | `direction`(方向性), `count`(10/20/30), `avoid?`(もう見た候補) | `topics[{title_en, title_ja, why_ja}]` | `medium` | 8000 / 16000 |
 | `POST /api/ai/grammar` | `ja`, `en`（例文1件） | `headline`, `build`(組み立ての順番), `points[{focus, label, detail}]`, `pitfalls[{wrong, why}]`, `variations[{en, ja}]` | `high` | 16000 |
 | `POST /api/ai/composition-ideas` | `courseId`, `count`(5/10/20), `situation?`(使いたい場面), `avoid?`(もう見た候補) | `ideas[{ja, en, whyJa, sources[{ja, en}]}]` | `high` | 16000 / 20000 |
+| `POST /api/ai/speech-words` | `courseId`, `count?`(既定3・1〜6), `avoid?`(もう見たワード) | `words[{ja, source_ja}]`（英訳は付けない） | `medium` | 8000 |
+| `POST /api/ai/monologue-speech-judge` | `words[]`(お題の日本語ワード), `speech`(英語スピーチ・4000字まで) | `rating`(great/good/bad), `feedback_ja`, `corrected`, `word_usage[{word, used, comment_ja}]`, `alternatives[{en, note_ja}]` | `high` | 既定 |
 
 **共通の約束事**
 
@@ -489,6 +500,7 @@ DB 書き込みは Server Action 経由（`src/app/actions/`）。
 | **自作テキストのリプロダクションの通しUI**（テキスト登録→任意でAI推敲→文単位で再現→回数記録／聴き比べ／マーキング） | 実装済み。**ブラウザ通し（Playwright）は未実施**。実機の `<audio>` 解錠・TTS 再生・「言えた」で `practice_logs` 加算・reanchor（推敲差し替え時）を通しで確認する必要がある |
 | **自作テキストの本番動作** | `migration 0007` はローカル・本番とも適用済み。ただし `/api/ai/naturalize` は `ANTHROPIC_API_KEY`、TTS は `OPENAI_API_KEY` が前提で、本番では未設定のため通しで動かしていない |
 | **AI エンドポイント4本** | `ANTHROPIC_API_KEY` 未設定のため実行していない。型・スキーマ・refusal 分岐はコード上は確認済み。`annotate` は quote 照合方式に変え、整数オフセット誤差は原理的に回避したが、**AI が quote を逐語一致でコピーできるかは実行して確かめる必要がある** |
+| **ワードスピーチ（新規）**（`/monologue/speech`・`POST /api/ai/speech-words`・`POST /api/ai/monologue-speech-judge`） | 実装済み。`tsc`・eslint・ユニットテスト（`canSubmitSpeech` / `summarizeWordUsage`）・`next build`（両ルート生成）は通過。**AI 実行・ブラウザ通しは未実施**。`ANTHROPIC_API_KEY` 未設定のためワード選定・採点の質は未確認で、コース選択→ワード生成→スピーチ入力→採点→読み上げの通し、および used 判定の寛容さは実行して確かめる必要がある。DB 書き込みは無し（机に向かう時間のみ `useStudyGuard` で計測） |
 | **練習中の1文カードの記号表示**（音の記号を重ねる／発音記号の行） | 実装済み。`tsc`・eslint・ユニットテスト（`tokenizeWords` / `resolveAiPronunciations` / `reanchorPronunciations`）・`next build` は通過。**ブラウザ通しは未実施**で、記号を重ねたときの行間・スマホ幅での折り返しは実機で見る必要がある |
 | **発音記号の生成**（`POST /api/ai/ipa`） | `migration 0010` はローカル・本番とも適用済み（`clips.ipa` あり）。生成そのものは `ANTHROPIC_API_KEY` 未設定のため実行していない。語の突き合わせ（大文字小文字・記号つき・同じ語の複数出現・原文に無い語）はユニットテスト済みだが、**AI が語を漏れなく出現順に返すか・IPA の質**は実行して確かめる必要がある |
 | **録音の実機保存**（Storage アップロード＋メタデータ行） | ヘッドレスブラウザにマイクがないため |
