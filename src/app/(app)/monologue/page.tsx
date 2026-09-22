@@ -1,3 +1,5 @@
+import { MessagesSquare } from 'lucide-react';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { MonologueSession } from '@/components/monologue/monologue-session';
@@ -46,6 +48,20 @@ export default async function MonologuePage() {
         goalSec={(profile as Profile | null)?.daily_goal_sec ?? 60}
         running={running}
       />
+
+      {/* 瞬間英作文で覚えた言葉を、独り言スピーチとして使ってみる導線 */}
+      <Link
+        href="/monologue/speech"
+        className="group flex items-start gap-3 rounded-xl border p-5 transition-colors hover:bg-accent/40"
+      >
+        <MessagesSquare className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0">
+          <p className="font-medium">ワードスピーチ</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            瞬間英作文で覚えた言葉をお題に、30〜60秒の英語スピーチを書いて AI に見てもらう。0 と 100 を繋ぐ練習です。
+          </p>
+        </div>
+      </Link>
     </div>
   );
 }
