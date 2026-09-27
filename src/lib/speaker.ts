@@ -17,6 +17,9 @@ const SILENT_WAV =
 const urlCache = new Map<string, Promise<string | null>>();
 
 let audioEl: HTMLAudioElement | null = null;
+
+// 今の読み上げを打ち切る関数。次の speak() か cancel() で呼ぶ（1度に鳴るのは1本だけ）。
+let abortCurrent: (() => void) | null = null;
 function audio(): HTMLAudioElement | null {
   if (typeof window === 'undefined') return null;
   if (!audioEl) audioEl = new Audio();
@@ -141,15 +144,34 @@ export function unlock() {
  * 読み上げる。終わったら onend を1回だけ呼ぶ。クラウド不可/失敗時は自動でフォールバック。
  * `onstart` は**実際に音が出はじめた**ときに1回だけ呼ぶ。初出の文はサーバでMP3を
  * 生成するぶん数秒待つことがあり、その間を「読み上げ中」と出すと黙って固まって見える。
+ * `onabort` は次の `speak()` か `cancel()` で打ち切られたときに呼ぶ（このとき onend は呼ばない）。
  */
-export function speak(text: string, opts?: { onstart?: () => void; onend?: () => void }) {
+export function speak(
+  text: string,
+  opts?: { onstart?: () => void; onend?: () => void; onabort?: () => void },
+) {
   initFallback();
-  const onend = opts?.onend ?? (() => {});
+  abortCurrent?.();
   const onstart = opts?.onstart ?? (() => {});
   let handled = false;
   let started = false;
+  let aborted = false;
+  const onend = () => {
+    if (aborted) return;
+    if (abortCurrent === abort) abortCurrent = null;
+    opts?.onend?.();
+  };
+  // 次の speak() か cancel() で打ち切られたとき。音声URLを待っている途中なら鳴らさない。
+  function abort() {
+    if (aborted) return;
+    aborted = true;
+    handled = true;
+    if (abortCurrent === abort) abortCurrent = null;
+    opts?.onabort?.();
+  }
+  abortCurrent = abort;
   const startOnce = () => {
-    if (started) return;
+    if (started || aborted) return;
     started = true;
     onstart();
   };
@@ -192,6 +214,7 @@ export function speak(text: string, opts?: { onstart?: () => void; onend?: () =>
 
 /** 再生を止める（<audio> と speechSynthesis の両方）。 */
 export function cancel() {
+  abortCurrent?.();
   const a = audio();
   if (a) {
     try {

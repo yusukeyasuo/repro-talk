@@ -1,9 +1,10 @@
 'use client';
 
-import { Check, RotateCcw, Send, Shuffle, Sparkles, Volume2, X } from 'lucide-react';
+import { Check, RotateCcw, Send, Shuffle, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { SpeakButton } from '@/components/speak-button';
 import { useStudyGuard } from '@/components/study/study-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,24 +39,6 @@ type Props = {
   /** 計測中の学習。机に向かう時間を計るかを訊くのに使う */
   running: StudySession | null;
 };
-
-/** 読み上げボタン。クリックの中で解錠してから読み上げる（iOS 対策）。 */
-function SpeakButton({ text, label }: { text: string; label: string }) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      onClick={() => {
-        speaker.unlock();
-        speaker.speak(text);
-      }}
-      aria-label={label}
-      className="shrink-0"
-    >
-      <Volume2 className="size-4" />
-    </Button>
-  );
-}
 
 /**
  * 「ワードスピーチ」。瞬間英作文のコースから AI が日本語ワードをいくつか選び、

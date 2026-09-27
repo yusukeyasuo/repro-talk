@@ -1,11 +1,12 @@
 'use client';
 
-import { Check, ChevronLeft, ChevronRight, RotateCcw, Send, Star, Volume2, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, RotateCcw, Send, Star, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { logCompositionReps, updateComposition } from '@/app/actions/compositions';
 import { type PlayProgress } from '@/components/composition/composition-player';
+import { SpeakButton } from '@/components/speak-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -34,24 +35,6 @@ type Props = {
    */
   onProgress?: (progress: PlayProgress) => void;
 };
-
-/** 読み上げボタン。クリックの中で解錠してから読み上げる（iOS 対策）。 */
-function SpeakButton({ text, label }: { text: string; label: string }) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      onClick={() => {
-        speaker.unlock();
-        speaker.speak(text);
-      }}
-      aria-label={label}
-      className="shrink-0"
-    >
-      <Volume2 className="size-4" />
-    </Button>
-  );
-}
 
 /**
  * 瞬間英作文の「AI添削モード」。日本語を見て自分で英文を打ち、AI が自然さを
