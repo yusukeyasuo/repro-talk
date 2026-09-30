@@ -50,7 +50,7 @@ export default async function MonologueSpeechPage() {
         </Link>
         <h1 className="mt-2 font-heading text-2xl font-semibold tracking-tight">ワードスピーチ</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          瞬間英作文で覚えた言葉をお題にして、30〜60秒の英語スピーチを書いてみる練習。覚えた型を、自分の言葉として使ってみる場です。
+          瞬間英作文で覚えたフレーズをお題にして、英語スピーチを書いてみる練習。覚えた型を、自分の言葉として使ってみる場です。
         </p>
       </header>
 
