@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import * as speaker from '@/lib/speaker';
 import {
   canSubmitSpeech,
@@ -30,8 +31,12 @@ type Course = { id: string; title: string };
 type SpeechWord = { ja: string; source_ja: string };
 type Phase = 'setup' | 'writing' | 'judging' | 'result';
 
-/** もう見せたワードの上限（出し直しで積み上がる）。サーバの MAX_AVOID と揃える。 */
+/** もう見せたフレーズの上限（出し直しで積み上がる）。サーバの MAX_AVOID と揃える。 */
 const MAX_AVOID = 60;
+
+/** 選べる個数。サーバの MAX_COUNT（15）を超えない。 */
+const COUNTS = [3, 5, 10, 15] as const;
+const DEFAULT_COUNT = 3;
 
 type Props = {
   courses: Course[];
@@ -58,8 +63,8 @@ function SpeakButton({ text, label }: { text: string; label: string }) {
 }
 
 /**
- * 「ワードスピーチ」。瞬間英作文のコースから AI が日本語ワードをいくつか選び、
- * 学習者はそれを織り込んだ30〜60秒の英語スピーチを書く。AI が採点・添削する。
+ * 「ワードスピーチ」。瞬間英作文のコースから AI が日本語フレーズをいくつか選び、
+ * 学習者はそれを織り込んだ英語スピーチを書く。AI が採点・添削する。
  * 瞬間英作文の添削（composition-judge-player）と同じ状態機械の考え方だが、
  * 録音・Wake Lock・音声は無く、机に向かう時間だけ useStudyGuard で任意計測する。
  */
@@ -67,6 +72,7 @@ export function WordSpeechSession({ courses, running }: Props) {
   const { guard, dialog: studyGuardDialog } = useStudyGuard('monologue', running);
 
   const [courseId, setCourseId] = useState(() => courses[0]?.id ?? '');
+  const [count, setCount] = useState<number>(DEFAULT_COUNT);
   const [phase, setPhase] = useState<Phase>('setup');
   const [words, setWords] = useState<SpeechWord[]>([]);
   const [avoid, setAvoid] = useState<string[]>([]);
@@ -91,7 +97,7 @@ export function WordSpeechSession({ courses, running }: Props) {
     if (phase === 'writing') textareaRef.current?.focus();
   }, [phase, words]);
 
-  async function fetchWords(nextAvoid: string[]) {
+  async function fetchWords(nextAvoid: string[], nextCount: number) {
     if (!courseId) return;
     setLoadingWords(true);
     abortRef.current?.abort();
@@ -101,7 +107,7 @@ export function WordSpeechSession({ courses, running }: Props) {
       const res = await fetch('/api/ai/speech-words', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ courseId, count: 3, avoid: nextAvoid }),
+        body: JSON.stringify({ courseId, count: nextCount, avoid: nextAvoid }),
         signal: controller.signal,
       });
       const json = await res.json();
@@ -129,12 +135,12 @@ export function WordSpeechSession({ courses, running }: Props) {
 
   // 最初のお題づくり。計測を始めるか一度だけ訊いてから走らせる。
   function startWords() {
-    guard(() => void fetchWords(avoid));
+    guard(() => void fetchWords(avoid, count));
   }
 
-  // 別のワードで（出し直し）。もう計測は判断済みなので guard は挟まない。
+  // 別のフレーズで（出し直し）。もう計測は判断済みなので guard は挟まない。
   function reshuffle() {
-    void fetchWords(avoid);
+    void fetchWords(avoid, count);
   }
 
   function judge() {
@@ -180,7 +186,7 @@ export function WordSpeechSession({ courses, running }: Props) {
   // 新しいお題（出し直し）。計測は判断済みなので guard は挟まない。
   function newWords() {
     speaker.cancel();
-    void fetchWords(avoid);
+    void fetchWords(avoid, count);
   }
 
   const showCoursePicker = courses.length > 1;
@@ -212,8 +218,27 @@ export function WordSpeechSession({ courses, running }: Props) {
             </div>
           )}
           <p className="text-sm text-muted-foreground">
-            そのコースの例文から、AI がいくつか日本語の言葉を選びます。英語の訳は出ません。自分で英語にしてスピーチに使ってみましょう。
+            そのコースの例文から、AI がいくつか日本語のフレーズを選びます。英語の訳は出ません。自分で英語にしてスピーチに使ってみましょう。
           </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-sm">フレーズの数</span>
+            <ToggleGroup
+              value={[String(count)]}
+              onValueChange={(value) => {
+                const next = Number(value[0]);
+                // 選択済みをもう一度押すと空になるので、そのときは今の個数を保つ
+                if ((COUNTS as readonly number[]).includes(next)) setCount(next);
+              }}
+              variant="outline"
+              size="sm"
+            >
+              {COUNTS.map((n) => (
+                <ToggleGroupItem key={n} value={String(n)} aria-label={`${n}個`}>
+                  <span className="font-mono tabular-nums">{n}</span>
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
           <Button
             size="lg"
             className="h-14 w-full rounded-full text-base"
@@ -221,7 +246,7 @@ export function WordSpeechSession({ courses, running }: Props) {
             disabled={loadingWords || !courseId}
           >
             {loadingWords ? <Spinner className="size-5" /> : <Sparkles className="size-5" />}
-            {loadingWords ? '作成中…' : 'お題ワードをつくる'}
+            {loadingWords ? '作成中…' : 'お題フレーズをつくる'}
           </Button>
         </section>
       )}
@@ -231,7 +256,7 @@ export function WordSpeechSession({ courses, running }: Props) {
         <section className="space-y-5">
           <div className="space-y-3 rounded-xl border p-5">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">この言葉を使ってスピーチする</p>
+              <p className="text-xs text-muted-foreground">このフレーズを使ってスピーチする</p>
               <Button
                 variant="ghost"
                 size="sm"
@@ -240,7 +265,7 @@ export function WordSpeechSession({ courses, running }: Props) {
                 className="h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground"
               >
                 {loadingWords ? <Spinner className="size-3.5" /> : <Shuffle className="size-3.5" />}
-                他のワードで
+                他のフレーズで
               </Button>
             </div>
             {/* お題は日本語。font-mono に入れない（豆腐対策）。 */}
@@ -269,7 +294,7 @@ export function WordSpeechSession({ courses, running }: Props) {
               className="text-base"
             />
             <p className="text-xs text-muted-foreground">
-              30〜60秒くらいで話す内容を書いてみましょう。完璧でなくて大丈夫です。
+              選んだフレーズを全部使って、話す内容を書いてみましょう。完璧でなくて大丈夫です。
             </p>
             {phase === 'judging' && (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -316,10 +341,10 @@ export function WordSpeechSession({ courses, running }: Props) {
             <p className="text-sm leading-relaxed">{result.feedback_ja}</p>
           </div>
 
-          {/* お題ワードの使用状況 */}
+          {/* お題フレーズの使用状況 */}
           {result.word_usage.length > 0 && (
             <section className="space-y-2">
-              <h2 className="text-xs font-medium text-muted-foreground">お題ワード</h2>
+              <h2 className="text-xs font-medium text-muted-foreground">お題フレーズ</h2>
               <ul className="space-y-2">
                 {result.word_usage.map((usage, i) => (
                   <li

@@ -58,7 +58,7 @@ export default async function MonologuePage() {
         <div className="min-w-0">
           <p className="font-medium">ワードスピーチ</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            瞬間英作文で覚えた言葉をお題に、30〜60秒の英語スピーチを書いて AI に見てもらう。0 と 100 を繋ぐ練習です。
+            瞬間英作文で覚えたフレーズをお題に、英語スピーチを書いて AI に見てもらう。0 と 100 を繋ぐ練習です。
           </p>
         </div>
       </Link>

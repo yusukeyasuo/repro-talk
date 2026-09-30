@@ -8,10 +8,10 @@ import { getCurrentUser } from '@/lib/supabase/server';
 
 export const maxDuration = 120;
 
-/** お題ワードは多くて6個（speech-words の上限に合わせる）。 */
-const MAX_WORDS = 6;
+/** お題フレーズは多くて15個（speech-words の上限に合わせる）。 */
+const MAX_WORDS = 15;
 const MAX_WORD_LENGTH = 100;
-/** 30〜60秒のスピーチなので長くはならない。異常に長い入力は弾く。 */
+/** スピーチは長くはならない。異常に長い入力は弾く。 */
 const MAX_SPEECH_LENGTH = 4000;
 
 const SpeechJudgeResult = z.object({
@@ -27,12 +27,12 @@ const SpeechJudgeResult = z.object({
   word_usage: z
     .array(
       z.object({
-        word: z.string().describe('お題の日本語ワード（渡されたものをそのまま返す）'),
+        word: z.string().describe('お題の日本語フレーズ（渡されたものをそのまま返す）'),
         used: z.boolean().describe('その概念が英語で表現できていれば true。訳語一致でなくても寛容に付ける'),
         comment_ja: z.string().describe('どう表現できていたか／どう言えばよかったかを日本語で一言'),
       }),
     )
-    .describe('お題のワードを渡された順に全て。過不足なく1ワード1件'),
+    .describe('お題のフレーズを渡された順に全て。過不足なく1フレーズ1件'),
   alternatives: z
     .array(
       z.object({
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         .slice(0, MAX_WORDS)
         .map((w) => w.trim().slice(0, MAX_WORD_LENGTH))
     : [];
-  if (targetWords.length === 0) return badRequest('お題のワードがありません');
+  if (targetWords.length === 0) return badRequest('お題のフレーズがありません');
 
   if (typeof speech !== 'string' || !speech.trim()) {
     return badRequest('スピーチを入力してください');

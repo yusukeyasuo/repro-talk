@@ -10,7 +10,7 @@ export const maxDuration = 120;
 
 const DEFAULT_COUNT = 3;
 const MIN_COUNT = 1;
-const MAX_COUNT = 6;
+const MAX_COUNT = 15;
 /** AI に渡す材料の上限。全文をぶちまけず、シャッフルして頭から30文だけ渡す。 */
 const MAX_SEEDS = 30;
 /** 出し直しで積み上がる「もう見たワード」の上限。 */
@@ -19,8 +19,8 @@ const MAX_AVOID = 60;
 const SpeechWords = z.object({
   words: z.array(
     z.object({
-      ja: z.string().describe('お題にする日本語の言葉（単語か短いフレーズ）。英語訳は付けない'),
-      source_ja: z.string().describe('その言葉を取り出した元の日本語の例文'),
+      ja: z.string().describe('お題にする日本語のフレーズ（そのまま口から出せる長さのまとまり）。英語訳は付けない'),
+      source_ja: z.string().describe('そのフレーズを取り出した元の日本語の例文'),
     }),
   ),
 });
