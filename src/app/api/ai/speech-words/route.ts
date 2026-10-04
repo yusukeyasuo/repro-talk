@@ -20,7 +20,6 @@ const SpeechWords = z.object({
   words: z.array(
     z.object({
       ja: z.string().describe('お題にする日本語の短いフレーズ（動詞句か名詞句ひとつ分、おおむね5〜12文字）。英語訳は付けない'),
-      source_ja: z.string().describe('そのフレーズを取り出した元の日本語の例文'),
     }),
   ),
 });

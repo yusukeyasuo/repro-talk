@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 import type { StudySession } from '@/types/database';
 
 type Course = { id: string; title: string };
-type SpeechWord = { ja: string; source_ja: string };
+type SpeechWord = { ja: string };
 type Phase = 'setup' | 'writing' | 'judging' | 'result';
 
 /** もう見せたフレーズの上限（出し直しで積み上がる）。サーバの MAX_AVOID と揃える。 */
@@ -270,12 +270,9 @@ export function WordSpeechSession({ courses, running }: Props) {
             </div>
             {/* お題は日本語。font-mono に入れない（豆腐対策）。 */}
             <ul className="space-y-2">
-              {words.map((word) => (
-                <li key={`${word.ja}-${word.source_ja}`} className="rounded-lg border p-3">
+              {words.map((word, i) => (
+                <li key={`${word.ja}-${i}`} className="rounded-lg border p-3">
                   <p className="text-lg font-medium">{word.ja}</p>
-                  {word.source_ja && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">{word.source_ja}</p>
-                  )}
                 </li>
               ))}
             </ul>
