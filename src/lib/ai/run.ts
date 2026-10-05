@@ -18,6 +18,18 @@ export class AiParseError extends Error {
   }
 }
 
+/**
+ * max_tokens（思考＋本文の合計上限）に達して出力が途中で切れた。構造化出力は
+ * 型を満たす最小限の値で閉じられることがあり、パースは通っても中身が欠けている
+ * （例: 総評が読点で切れ、残りのフィールドが "x" や [] になる）。そのまま返さない。
+ */
+export class AiTruncatedError extends Error {
+  constructor() {
+    super('AI の出力が上限で途中までになりました');
+    this.name = 'AiTruncatedError';
+  }
+}
+
 type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export async function runStructured<S extends z.ZodType>(opts: {
@@ -49,6 +61,8 @@ export async function runStructured<S extends z.ZodType>(opts: {
   if (message.stop_reason === 'refusal') {
     throw new AiRefusalError(message.stop_details?.category ?? null);
   }
+
+  if (message.stop_reason === 'max_tokens') throw new AiTruncatedError();
 
   const parsed = message.parsed_output;
   if (parsed == null) throw new AiParseError();

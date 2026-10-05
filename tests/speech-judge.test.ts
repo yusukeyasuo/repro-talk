@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   canSubmitSpeech,
+  isCompleteSpeechJudge,
   MIN_SPEECH_LENGTH,
   ratingMeta,
   summarizeWordUsage,
@@ -53,5 +54,41 @@ describe('speech-judge: 判定バッジのメタ情報（composition-judge か�
 
   it('想定外の値は good にフォールバックする', () => {
     assert.equal(ratingMeta('weird').label, ratingMeta('good').label);
+  });
+});
+
+describe('speech-judge: 採点結果の検品', () => {
+  const usage = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ word: `w${i}`, used: true, comment_ja: '' }));
+  const complete = {
+    feedback_ja: '流れが自然です。',
+    corrected: 'Today I want to talk about my morning routine.',
+    word_usage: usage(10),
+  };
+
+  it('お題と同じ件数で中身があれば通す', () => {
+    assert.equal(isCompleteSpeechJudge(complete, 10), true);
+  });
+
+  it('途中で切れて最小限の値で閉じられた結果は通さない', () => {
+    assert.equal(
+      isCompleteSpeechJudge(
+        { feedback_ja: '10個のフレーズを無理なく一つの流れに織り込めていて、', corrected: 'x', word_usage: [] },
+        10,
+      ),
+      false,
+    );
+  });
+
+  it('word_usage の件数がお題と違えば通さない', () => {
+    assert.equal(isCompleteSpeechJudge({ ...complete, word_usage: usage(9) }, 10), false);
+  });
+
+  it('書き直しが短すぎれば通さない', () => {
+    assert.equal(isCompleteSpeechJudge({ ...complete, corrected: '  x  ' }, 10), false);
+  });
+
+  it('総評が空なら通さない', () => {
+    assert.equal(isCompleteSpeechJudge({ ...complete, feedback_ja: ' ' }, 10), false);
   });
 });
