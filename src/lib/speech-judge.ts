@@ -48,3 +48,22 @@ export function summarizeWordUsage(usage: { used: boolean }[]): {
     total: usage.length,
   };
 }
+
+/**
+ * AI の採点結果が欠けていないかの検品。スキーマ（Zod）は型しか見ないので、
+ * 出力が途中で切れて "x" や [] で閉じられた結果も通ってしまう。
+ * - word_usage はお題と同じ件数（プロンプトで「過不足なく1フレーズ1件」と指示している）
+ * - corrected はスピーチ全文の書き直しなので、送信の最低文字数を下回らない
+ * - feedback_ja が空でない
+ * 満たさないものは画面に出さず、もう一度試してもらう（添削は「正解」として読み上げられる）。
+ */
+export function isCompleteSpeechJudge(
+  result: Pick<SpeechJudgeResult, 'feedback_ja' | 'corrected' | 'word_usage'>,
+  wordCount: number,
+): boolean {
+  return (
+    result.word_usage.length === wordCount &&
+    result.corrected.trim().length >= MIN_SPEECH_LENGTH &&
+    result.feedback_ja.trim() !== ''
+  );
+}

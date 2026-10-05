@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { AiParseError, AiRefusalError } from './ai/run';
+import { AiParseError, AiRefusalError, AiTruncatedError } from './ai/run';
 
 /** middleware は /api/ を除外しているので、各 Route Handler が自分で認証する。 */
 export function unauthorized() {
@@ -20,6 +20,12 @@ export function aiErrorResponse(error: unknown) {
         category: error.category,
       },
       { status: 422 },
+    );
+  }
+  if (error instanceof AiTruncatedError) {
+    return NextResponse.json(
+      { error: 'AI の出力が途中で切れました。もう一度試してください。' },
+      { status: 502 },
     );
   }
   if (error instanceof AiParseError) {

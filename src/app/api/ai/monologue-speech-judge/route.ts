@@ -2,17 +2,26 @@ import { NextResponse } from 'next/server';
 import * as z from 'zod';
 
 import { MONOLOGUE_SPEECH_JUDGE_SYSTEM_PROMPT } from '@/lib/ai/prompts';
-import { runStructured } from '@/lib/ai/run';
+import { AiParseError, runStructured } from '@/lib/ai/run';
 import { aiErrorResponse, badRequest, unauthorized } from '@/lib/api';
+import { isCompleteSpeechJudge } from '@/lib/speech-judge';
 import { getCurrentUser } from '@/lib/supabase/server';
 
-export const maxDuration = 120;
+// max_tokens を非ストリーミングの上限まで取るので、生成が既定（120秒）に収まらないことがある
+export const maxDuration = 300;
 
 /** お題フレーズは多くて15個（speech-words の上限に合わせる）。 */
 const MAX_WORDS = 15;
 const MAX_WORD_LENGTH = 100;
 /** スピーチは長くはならない。異常に長い入力は弾く。 */
 const MAX_SPEECH_LENGTH = 4000;
+/**
+ * max_tokens は思考＋本文の合計上限。フレーズが10個前後になると、思考（各フレーズの使用判定）・
+ * スピーチ全文の書き直し・word_usage の件数がそろって膨らみ、既定の 16,000 では本文の途中で
+ * 尽きる。非ストリーミングの上限（`60 * 60 * max_tokens / 128000 > 600` 秒 → 21,333）
+ * いっぱいまで取る。
+ */
+const MAX_TOKENS = 21333;
 
 const SpeechJudgeResult = z.object({
   rating: z
@@ -80,11 +89,14 @@ export async function POST(request: Request) {
       schema: SpeechJudgeResult,
       // 添削・書き直しは誤りが学習者を害する評価タスク。出力は読み上げで「正解」として流れる。
       effort: 'high',
+      maxTokens: MAX_TOKENS,
       user: [
         `<target_words>\n${targetWords.join('\n')}\n</target_words>`,
         `<learner_speech>\n${speech.trim()}\n</learner_speech>`,
       ].join('\n\n'),
     });
+    // 型は合っていても中身が欠けた結果（"x" や [] で閉じられたもの）は出さない
+    if (!isCompleteSpeechJudge(result, targetWords.length)) throw new AiParseError();
     return NextResponse.json(result);
   } catch (error) {
     return aiErrorResponse(error);
