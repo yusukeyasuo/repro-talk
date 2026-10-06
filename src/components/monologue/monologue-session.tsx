@@ -1,9 +1,19 @@
 'use client';
 
-import { Check, ListOrdered, Mic, Pencil, Shuffle, Sparkles, Square } from 'lucide-react';
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ListOrdered,
+  Mic,
+  PenLine,
+  Pencil,
+  Sparkles,
+  Square,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { saveMonologueFeedback, saveMonologueSession } from '@/app/actions/monologue';
@@ -15,13 +25,15 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
+import { WritingPanel } from '@/components/monologue/writing-panel';
 import { useStudyGuard } from '@/components/study/study-guard';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useRecorder } from '@/hooks/use-recorder';
 import { useWakeLock } from '@/hooks/use-wake-lock';
+import { todayJst } from '@/lib/activity';
 import { cn } from '@/lib/utils';
 import { formatDurationJa } from '@/lib/youtube';
 import type { AiSuggestion, MonologueTopic, Phrase, StudySession } from '@/types/database';
@@ -44,6 +56,32 @@ function todayIndex(length: number) {
   return days % length;
 }
 
+/** 選んだお題（その日だけ有効）と、最後に使ったモード。端末ごとの便利機能なので DB には持たない。 */
+const TOPIC_KEY = 'monologue:topic';
+const MODE_KEY = 'monologue:mode';
+
+type Mode = 'speak' | 'write';
+
+/** 今日選んだお題の id。日付が変わっていたら日替わりのお題に戻すので null。 */
+function readPickedTopicId(): string | null {
+  try {
+    const raw = localStorage.getItem(TOPIC_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as { date?: unknown; topicId?: unknown };
+    return saved.date === todayJst() && typeof saved.topicId === 'string' ? saved.topicId : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePickedTopicId(topicId: string) {
+  try {
+    localStorage.setItem(TOPIC_KEY, JSON.stringify({ date: todayJst(), topicId }));
+  } catch {
+    // 保存できなくても選択そのものは効いている
+  }
+}
+
 export function MonologueSession({ topics, phrases, goalSec, running }: Props) {
   const router = useRouter();
   const recorder = useRecorder();
@@ -51,6 +89,10 @@ export function MonologueSession({ topics, phrases, goalSec, running }: Props) {
   const { guard, dialog: studyGuardDialog } = useStudyGuard('monologue', running);
 
   const [topicIndex, setTopicIndex] = useState(() => todayIndex(topics.length));
+  // 自分で選んだ（送った）お題か。ラベルを「今日のお題」と「選んだお題」で出し分ける
+  const [picked, setPicked] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>('speak');
   const [usedPhraseIds, setUsedPhraseIds] = useState<Set<string>>(new Set());
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastDuration, setLastDuration] = useState(0);
@@ -63,6 +105,42 @@ export function MonologueSession({ topics, phrases, goalSec, running }: Props) {
   const [pending, startTransition] = useTransition();
 
   const topic = topics[topicIndex] ?? null;
+
+  // localStorage は外部ストア。SSR と初期HTMLは既定値で描き、マウント後に一度だけ同期する。
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const pickedId = readPickedTopicId();
+    const index = pickedId ? topics.findIndex((t) => t.id === pickedId) : -1;
+    if (index >= 0) {
+      setTopicIndex(index);
+      setPicked(true);
+    }
+    try {
+      if (localStorage.getItem(MODE_KEY) === 'write') setMode('write');
+    } catch {
+      // 読めなければ既定の「話す」のまま
+    }
+    // マウント時に一度だけ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  function selectTopic(index: number) {
+    const next = topics[index];
+    if (!next) return;
+    setTopicIndex(index);
+    setPicked(true);
+    writePickedTopicId(next.id);
+  }
+
+  function changeMode(next: Mode) {
+    setMode(next);
+    try {
+      localStorage.setItem(MODE_KEY, next);
+    } catch {
+      // 保存できなくても切り替えそのものは効いている
+    }
+  }
   const progress = Math.min(100, Math.round((recorder.elapsedSec / goalSec) * 100));
 
   async function start() {
@@ -161,89 +239,130 @@ export function MonologueSession({ topics, phrases, goalSec, running }: Props) {
     <div className="space-y-6">
       {studyGuardDialog}
 
-      {/* お題 */}
-      <section className="rounded-xl border p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">今日のお題</p>
-            <p className="mt-1 text-lg font-medium">{topic?.title_en ?? '—'}</p>
-            <p className="text-sm text-muted-foreground">{topic?.title_ja ?? ''}</p>
-          </div>
-          <div className="flex shrink-0 items-center">
-            {/* 自分のお題は並びの末尾に付くので、送りだけだと届かない。一覧から直接選べるようにする。 */}
-            <TopicPicker
-              topics={topics}
-              currentIndex={topicIndex}
-              onSelect={setTopicIndex}
-            />
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setTopicIndex((i) => (i + 1) % Math.max(1, topics.length))}
-              aria-label="別のお題"
-            >
-              <Shuffle className="size-4" />
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* 録音（1人電話） */}
-      <section className="rounded-xl border p-6 text-center">
-        <div className="mx-auto flex max-w-xs flex-col items-center gap-4">
-          <div className="font-mono text-5xl tabular-nums">
-            {String(Math.floor(recorder.elapsedSec / 60)).padStart(2, '0')}:
-            {String(recorder.elapsedSec % 60).padStart(2, '0')}
-          </div>
-
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full bg-foreground transition-[width] duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            目標 {formatDurationJa(goalSec)}。まずは1分から。
-          </p>
-
+      {/* お題。カードそのものを押すと一覧が開く（自分のお題は並びの末尾にあり、送りだけだと届かない） */}
+      <section className="rounded-xl border">
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          disabled={topics.length === 0}
+          className="flex w-full items-start justify-between gap-3 rounded-t-xl p-5 text-left transition-colors hover:bg-accent/40"
+        >
+          <span className="min-w-0">
+            <span className="block text-xs text-muted-foreground">
+              {picked ? '選んだお題' : '今日のお題'}
+            </span>
+            <span className="mt-1 block text-lg font-medium">{topic?.title_en ?? '—'}</span>
+            <span className="block text-sm text-muted-foreground">{topic?.title_ja ?? ''}</span>
+          </span>
+          <ChevronDown className="mt-6 size-5 shrink-0 text-muted-foreground" />
+        </button>
+        <div className="grid grid-cols-2 border-t">
           <Button
-            size="lg"
-            variant={recorder.isRecording ? 'destructive' : 'default'}
-            className="h-16 w-full rounded-full text-base"
-            onClick={recorder.isRecording ? stop : () => guard(() => void start())}
-            disabled={recorder.state === 'requesting' || saving}
+            variant="ghost"
+            className="h-12 rounded-none rounded-bl-xl"
+            onClick={() => setPickerOpen(true)}
+            disabled={topics.length === 0}
           >
-            {saving ? (
-              <Spinner className="size-5" />
-            ) : recorder.isRecording ? (
-              <Square className="size-5" />
-            ) : (
-              <Mic className="size-5" />
-            )}
-            {saving ? '保存中…' : recorder.isRecording ? '終わる' : '1人電話を始める'}
+            <ListOrdered className="size-4" />
+            一覧から選ぶ
           </Button>
-
-          {recorder.error && <p className="text-xs text-destructive">{recorder.error}</p>}
-
-          {recorder.isRecording && !wakeLock.active && (
-            <p className="text-xs text-amber-600 dark:text-amber-500">
-              {wakeLock.supported
-                ? '画面が消えると録音が止まります。'
-                : 'このブラウザは画面ロック防止に対応していません。画面を消さないでください。'}
-            </p>
-          )}
-
-          {!recorder.isRecording && lastDuration > 0 && (
-            <p className="text-xs text-muted-foreground">
-              前回 {formatDurationJa(lastDuration)}
-            </p>
-          )}
+          <Button
+            variant="ghost"
+            className="h-12 rounded-none rounded-br-xl border-l"
+            onClick={() => selectTopic((topicIndex + 1) % Math.max(1, topics.length))}
+            disabled={topics.length === 0}
+          >
+            次のお題
+            <ArrowRight className="size-4" />
+          </Button>
         </div>
-
-        <p className="mx-auto mt-5 max-w-sm text-xs text-muted-foreground">
-          歩きながら電話しているフリで話し続けます。相手に伝えるという設定があるだけで、英語を作り出す速度が上がります。
-        </p>
+        <TopicPicker
+          topics={topics}
+          currentIndex={topicIndex}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onSelect={selectTopic}
+        />
       </section>
+
+      {/* 話す（1人電話）と書く（添削）。独り言の本筋は声を出すほうなので既定は「話す」 */}
+      <Tabs value={mode} onValueChange={(value) => changeMode(value as Mode)}>
+        <TabsList className="h-11 w-full group-data-horizontal/tabs:h-11">
+          <TabsTrigger value="speak" className="text-base">
+            <Mic className="size-4" />
+            話す
+          </TabsTrigger>
+          <TabsTrigger value="write" className="text-base">
+            <PenLine className="size-4" />
+            書く
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="speak">
+          {/* 録音（1人電話） */}
+          <section className="rounded-xl border p-6 text-center">
+            <div className="mx-auto flex max-w-xs flex-col items-center gap-4">
+              <div className="font-mono text-5xl tabular-nums">
+                {String(Math.floor(recorder.elapsedSec / 60)).padStart(2, '0')}:
+                {String(recorder.elapsedSec % 60).padStart(2, '0')}
+              </div>
+
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-foreground transition-[width] duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                目標 {formatDurationJa(goalSec)}。まずは1分から。
+              </p>
+
+              <Button
+                size="lg"
+                variant={recorder.isRecording ? 'destructive' : 'default'}
+                className="h-16 w-full rounded-full text-base"
+                onClick={recorder.isRecording ? stop : () => guard(() => void start())}
+                disabled={recorder.state === 'requesting' || saving}
+              >
+                {saving ? (
+                  <Spinner className="size-5" />
+                ) : recorder.isRecording ? (
+                  <Square className="size-5" />
+                ) : (
+                  <Mic className="size-5" />
+                )}
+                {saving ? '保存中…' : recorder.isRecording ? '終わる' : '1人電話を始める'}
+              </Button>
+
+              {recorder.error && <p className="text-xs text-destructive">{recorder.error}</p>}
+
+              {recorder.isRecording && !wakeLock.active && (
+                <p className="text-xs text-amber-600 dark:text-amber-500">
+                  {wakeLock.supported
+                    ? '画面が消えると録音が止まります。'
+                    : 'このブラウザは画面ロック防止に対応していません。画面を消さないでください。'}
+                </p>
+              )}
+
+              {!recorder.isRecording && lastDuration > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  前回 {formatDurationJa(lastDuration)}
+                </p>
+              )}
+            </div>
+
+            <p className="mx-auto mt-5 max-w-sm text-xs text-muted-foreground">
+              歩きながら電話しているフリで話し続けます。相手に伝えるという設定があるだけで、英語を作り出す速度が上がります。
+            </p>
+          </section>
+
+        </TabsContent>
+
+        <TabsContent value="write">
+          {/* 声を出していないので、話した時間には記録しない */}
+          <WritingPanel topic={topic} guard={guard} />
+        </TabsContent>
+      </Tabs>
 
       {/* 今日使うフレーズ */}
       <section className="space-y-3">
@@ -363,13 +482,17 @@ export function MonologueSession({ topics, phrases, goalSec, running }: Props) {
 function TopicPicker({
   topics,
   currentIndex,
+  open,
+  onOpenChange,
   onSelect,
 }: {
   topics: MonologueTopic[];
   currentIndex: number;
+  /** カードとボタンのどちらからでも開けるように、開閉は親が持つ */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSelect: (index: number) => void;
 }) {
-  const [open, setOpen] = useState(false);
 
   // 選択は配列の添字で持っているので、絞り込んでも元の位置を連れて回る。
   const indexed = topics.map((topic, index) => ({ topic, index }));
@@ -378,18 +501,11 @@ function TopicPicker({
 
   function choose(index: number) {
     onSelect(index);
-    setOpen(false);
+    onOpenChange(false);
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button size="icon" variant="ghost" aria-label="お題を選ぶ">
-            <ListOrdered className="size-4" />
-          </Button>
-        }
-      />
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>お題を選ぶ</DialogTitle>
