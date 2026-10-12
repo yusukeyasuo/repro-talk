@@ -25,21 +25,29 @@ type Candidate = { key: string; ja: string; en: string };
 
 type Props = {
   result: WritingJudgeResult;
+  /** コース名に入れるお題（日本語）。お題なしなら null */
+  topicJa: string | null;
 };
 
 /**
  * 添削の「自然にすると」（文ごと）と「別の言い方」から、反復したい文を選んで
- * 瞬間英作文の専用コース「独り言から」へ入れる。
+ * 瞬間英作文のコースへ入れる。行き先は日付＋お題ごとのコース（「独り言 M/D お題」）で、
+ * 同じ日・同じお題で書き直したものも同じコースにまとまる（決め方は addToMonologueCourse）。
+ * 同じ添削から2回目以降に登録したものは、1回目に入れたコースへ足す。
+ * この部品は結果画面でだけ描かれ、書き直すとアンマウントされるので、courseId と
+ * 登録済みの行は添削結果ごとに自然にリセットされる。
  *
  * 入れた英語はドリルで「正解」として読み上げられるので、AI の出力を無検品で入れない。
  * 初期状態は未選択で、1件ずつ本人が選ぶ（全選択はあるが、押すのは本人）。
  */
-export function RegisterCompositionDialog({ result }: Props) {
+export function RegisterCompositionDialog({ result, topicJa }: Props) {
   const uid = useId();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // この添削から登録済みの行。同じ結果を開き直しても選べないようにする
   const [registered, setRegistered] = useState<Set<string>>(new Set());
+  // この添削で入れたコース。2回目以降の登録はここへ足す
+  const [course, setCourse] = useState<{ id: string; title: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const sentences: Candidate[] = result.corrected_sentences.map((s, i) => ({
@@ -67,6 +75,8 @@ export function RegisterCompositionDialog({ result }: Props) {
 
     startTransition(async () => {
       const res = await addToMonologueCourse({
+        courseId: course?.id ?? null,
+        topicJa,
         rows: picked.map((c) => ({ ja: c.ja, en: c.en })),
       });
       if (!res.ok) {
@@ -77,9 +87,10 @@ export function RegisterCompositionDialog({ result }: Props) {
       setSelected(new Set());
       setOpen(false);
 
-      const { courseId, added, skipped } = res.data;
+      const { courseId, courseTitle, added, skipped } = res.data;
+      setCourse({ id: courseId, title: courseTitle });
       toast.success(
-        added > 0 ? `「独り言から」に ${added} 件追加しました` : 'すべて登録済みの文でした',
+        added > 0 ? `「${courseTitle}」に ${added} 件追加しました` : 'すべて登録済みの文でした',
         {
           description: skipped > 0 && added > 0 ? `${skipped} 件は登録済みだったので飛ばしました` : undefined,
           action: (
@@ -109,7 +120,9 @@ export function RegisterCompositionDialog({ result }: Props) {
         <DialogHeader>
           <DialogTitle>瞬間英作文に登録</DialogTitle>
           <DialogDescription>
-            反復して覚えたい文を選ぶと、コース「独り言から」に入ります。日本語を見て英語を言うドリルになります。
+            {course
+              ? `選んだ文は、この添削のコース「${course.title}」に足されます。`
+              : '反復して覚えたい文を選ぶと、今日の日付とお題のコースに入ります（同じ日に同じお題で書いたものは1つのコースにまとまります）。日本語を見て英語を言うドリルになります。'}
           </DialogDescription>
         </DialogHeader>
 
