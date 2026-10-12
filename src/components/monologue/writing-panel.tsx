@@ -5,12 +5,18 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { addPhrases } from '@/app/actions/phrases';
+import { RegisterCompositionDialog } from '@/components/monologue/register-composition-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import * as speaker from '@/lib/speaker';
-import { canSubmitSpeech, ratingMeta, type WritingJudgeResult } from '@/lib/writing-judge';
+import {
+  canSubmitSpeech,
+  joinCorrected,
+  ratingMeta,
+  type WritingJudgeResult,
+} from '@/lib/writing-judge';
 import type { MonologueTopic } from '@/types/database';
 
 type Phase = 'writing' | 'judging' | 'result';
@@ -128,6 +134,8 @@ export function WritingPanel({ topic, guard }: Props) {
     });
   }
 
+  const corrected = result ? joinCorrected(result.corrected_sentences) : '';
+
   return (
     <div className="space-y-5">
       {(phase === 'writing' || phase === 'judging') && (
@@ -204,8 +212,8 @@ export function WritingPanel({ topic, guard }: Props) {
           <section className="space-y-2">
             <h2 className="text-xs font-medium text-muted-foreground">自然にすると</h2>
             <div className="flex items-start justify-between gap-2 rounded-lg border p-3">
-              <p className="min-w-0 flex-1 font-mono text-sm leading-relaxed">{result.corrected}</p>
-              <SpeakButton text={result.corrected} label="添削した文章を読み上げ" />
+              <p className="min-w-0 flex-1 font-mono text-sm leading-relaxed">{corrected}</p>
+              <SpeakButton text={corrected} label="添削した文章を読み上げ" />
             </div>
             <p className="text-xs text-muted-foreground">
               読み上げを聞いたら、声に出して言ってみましょう。
@@ -251,6 +259,9 @@ export function WritingPanel({ topic, guard }: Props) {
               </ul>
             </section>
           )}
+
+          {/* 反復して覚えたい文を瞬間英作文へ。選ぶのは本人（AI の出力を無検品で入れない） */}
+          <RegisterCompositionDialog result={result} />
 
           <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" size="lg" className="h-12" onClick={rewrite}>

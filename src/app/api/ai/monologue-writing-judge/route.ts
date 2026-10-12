@@ -15,7 +15,7 @@ const MAX_TEXT_LENGTH = 4000;
 const MAX_TOPIC_LENGTH = 200;
 /**
  * max_tokens は思考＋本文の合計上限。ワードスピーチと違ってお題ワードの判定が無いぶん
- * 出力は小さい。非ストリーミングの上限（21,333）は超えない。
+ * 出力は小さい（文ごとの日本語訳を足しても数文ぶん）。非ストリーミングの上限（21,333）は超えない。
  */
 const MAX_TOKENS = 16000;
 
@@ -26,9 +26,14 @@ const WritingJudgeResult = z.object({
   feedback_ja: z
     .string()
     .describe('良かった点に触れてから直すとよい点を具体的に。日本語で2〜4文。萎縮させない・社交辞令は書かない'),
-  corrected: z
-    .string()
-    .describe('学習者の語・構文を残し、言いたかった意味を保ったまま自然な話し言葉にした全文。日本語の部分も英語にする。前置き・引用符・解説は入れない'),
+  corrected_sentences: z
+    .array(
+      z.object({
+        en: z.string().describe('自然にした英語の1文。学習者の語・構文を残した話し言葉'),
+        ja: z.string().describe('その英語を言いたいときの自然な日本語。瞬間英作文の問題文になる'),
+      }),
+    )
+    .describe('学習者の文章を言いたかった意味のまま自然にした全文を、文ごとに順番どおり。日本語の部分も英語にする'),
   corrections: z
     .array(
       z.object({
@@ -42,7 +47,7 @@ const WritingJudgeResult = z.object({
     .array(
       z.object({
         en: z.string().describe('この話題で次に使える自然な言い回し。独り言でそのまま口に出せる長さ'),
-        meaning_ja: z.string().describe('その英語の意味を日本語で一言'),
+        meaning_ja: z.string().describe('その英語を言いたいときの自然な日本語。瞬間英作文の問題文になる'),
         note_ja: z.string().describe('ニュアンスや使う場面を日本語で一言'),
       }),
     )
