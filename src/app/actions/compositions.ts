@@ -7,6 +7,9 @@ import type { CompositionDraft } from '@/lib/composition-csv';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import type { CompositionSource } from '@/types/database';
 
+/** 独り言の「書く」から登録する先のコース名。 */
+const MONOLOGUE_COURSE_TITLE = '独り言から';
+
 // --- コース --------------------------------------------------------------
 
 export async function createCourse(input: {
@@ -185,6 +188,28 @@ export async function deleteComposition(input: {
   return { ok: true, data: undefined };
 }
 
+/** 整えた行を course の末尾へ積む。失敗したらエラーメッセージを返す。 */
+async function insertRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  courseId: string,
+  rows: CompositionDraft[],
+  source: CompositionSource,
+): Promise<string | null> {
+  const base = await nextSortBase(supabase, courseId);
+  const { error } = await supabase.from('compositions').insert(
+    rows.map((r, i) => ({
+      user_id: userId,
+      course_id: courseId,
+      ja: r.ja,
+      en: r.en,
+      source,
+      sort_order: base + i + 1,
+    })),
+  );
+  return error ? error.message : null;
+}
+
 /**
  * 複数行を末尾へまとめて追記する。CSV/TSV の一括登録と、応用練習で採用した文の
  * 両方がここを通る。source は出自の印で、既定は本人が入れた例文（'manual'）。
@@ -211,21 +236,87 @@ export async function importCompositions(input: {
     return { ok: false, error: 'コースが見つかりません' };
   }
 
-  const base = await nextSortBase(supabase, input.courseId);
-  const payload = rows.map((r, i) => ({
-    user_id: user.id,
-    course_id: input.courseId,
-    ja: r.ja,
-    en: r.en,
-    source,
-    sort_order: base + i + 1,
-  }));
-
-  const { error } = await supabase.from('compositions').insert(payload);
-  if (error) return { ok: false, error: error.message };
+  const error = await insertRows(supabase, user.id, input.courseId, rows, source);
+  if (error) return { ok: false, error };
 
   revalidatePath(`/compositions/${input.courseId}`);
   return { ok: true, data: { added: rows.length } };
+}
+
+/**
+ * 独り言の「書く」の添削から、本人が選んだ文を専用コースへ入れる。
+ * コースは列ではなくタイトルで見分ける（DB を変えずに済ませる割り切り）。本人がコース名を
+ * 変えたら、次の登録で新しい「独り言から」ができる。
+ * source は 'manual'。元は本人の文章で、入れる文も本人が1件ずつ選んでいる。
+ * 同じ英文がすでにコースにあれば入れない（二度押し・同じ添削からの再登録で重複させない）。
+ */
+export async function addToMonologueCourse(input: {
+  rows: CompositionDraft[];
+}): Promise<ActionResult<{ courseId: string; added: number; skipped: number }>> {
+  const user = await getCurrentUser();
+  if (!user) return AUTH_REQUIRED;
+
+  const rows = input.rows
+    .map((r) => ({ ja: r.ja.trim(), en: r.en.trim() }))
+    .filter((r) => r.ja && r.en);
+  if (rows.length === 0) return { ok: false, error: '登録できる文がありませんでした' };
+
+  const supabase = await createClient();
+
+  const { data: found, error: findError } = await supabase
+    .from('composition_courses')
+    .select('id')
+    .eq('title', MONOLOGUE_COURSE_TITLE)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (findError) return { ok: false, error: findError.message };
+
+  let courseId = found?.id ?? null;
+  if (!courseId) {
+    const { data: created, error: createError } = await supabase
+      .from('composition_courses')
+      .insert({
+        user_id: user.id,
+        title: MONOLOGUE_COURSE_TITLE,
+        description: '独り言で書いて添削してもらった表現',
+      })
+      .select('id')
+      .single();
+    if (createError) return { ok: false, error: createError.message };
+    courseId = created.id;
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from('compositions')
+    .select('en')
+    .eq('course_id', courseId);
+  if (existingError) return { ok: false, error: existingError.message };
+
+  const seen = new Set((existing ?? []).map((r) => normalizeEn(r.en)));
+  const fresh = rows.filter((r) => {
+    const key = normalizeEn(r.en);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  if (fresh.length > 0) {
+    const error = await insertRows(supabase, user.id, courseId, fresh, 'manual');
+    if (error) return { ok: false, error };
+  }
+
+  revalidatePath('/compositions');
+  revalidatePath(`/compositions/${courseId}`);
+  return {
+    ok: true,
+    data: { courseId, added: fresh.length, skipped: rows.length - fresh.length },
+  };
+}
+
+/** 重複の判定用。大文字小文字・空白の違いだけなら同じ文とみなす。 */
+function normalizeEn(en: string): string {
+  return en.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 // --- 読み上げ回数の記録 ---------------------------------------------------
