@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   isCompleteWritingJudge,
   joinCorrected,
+  monologueCourseTitle,
   type WritingJudgeResult,
 } from '../src/lib/writing-judge.ts';
 
@@ -86,5 +87,21 @@ describe('writing-judge: 検品', () => {
       }),
       false,
     );
+  });
+});
+
+describe('writing-judge: 登録先のコース名', () => {
+  it('日付とお題を入れる（月日は0埋めしない）', () => {
+    assert.equal(monologueCourseTitle('2026-01-05', '好きな食べ物'), '独り言 1/5 好きな食べ物');
+  });
+
+  it('お題が無い・空白だけなら日付だけ', () => {
+    assert.equal(monologueCourseTitle('2026-10-12', null), '独り言 10/12');
+    assert.equal(monologueCourseTitle('2026-10-12', '  '), '独り言 10/12');
+  });
+
+  it('お題の前後の空白は削り、長すぎるものは切り詰める', () => {
+    assert.equal(monologueCourseTitle('2026-10-12', ' 週末 '), '独り言 10/12 週末');
+    assert.equal(monologueCourseTitle('2026-10-12', 'あ'.repeat(100)), `独り言 10/12 ${'あ'.repeat(80)}`);
   });
 });

@@ -3,12 +3,11 @@
 import { revalidatePath } from 'next/cache';
 
 import { AUTH_REQUIRED, type ActionResult } from '@/lib/action-result';
+import { todayJst } from '@/lib/activity';
 import type { CompositionDraft } from '@/lib/composition-csv';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
+import { monologueCourseTitle } from '@/lib/writing-judge';
 import type { CompositionSource } from '@/types/database';
-
-/** 独り言の「書く」から登録する先のコース名。 */
-const MONOLOGUE_COURSE_TITLE = '独り言から';
 
 // --- コース --------------------------------------------------------------
 
@@ -244,15 +243,24 @@ export async function importCompositions(input: {
 }
 
 /**
- * 独り言の「書く」の添削から、本人が選んだ文を専用コースへ入れる。
- * コースは列ではなくタイトルで見分ける（DB を変えずに済ませる割り切り）。本人がコース名を
- * 変えたら、次の登録で新しい「独り言から」ができる。
+ * 独り言の「書く」の添削から、本人が選んだ文をコースへ入れる。
+ * **日付＋お題ごとに1コース**（「独り言 M/D お題」）。1つのコースに積み続けると
+ * ドリルで回しきれなくなるため、1回の独り言ぶんを1つの束にする。
+ * 行き先は次の順で決める。
+ * 1. courseId（同じ添削から2回目以降）。日付をまたいでも同じ添削の文は同じコースへ
+ * 2. 同じ名前のコース（同じ日・同じお題で書き直した／書き足した）。同名のコースを並べない
+ * 3. どちらも無ければ新しく作る
+ * 名前で見分ける割り切りなので、本人がコース名を変えたら次は新しいコースになる。
  * source は 'manual'。元は本人の文章で、入れる文も本人が1件ずつ選んでいる。
- * 同じ英文がすでにコースにあれば入れない（二度押し・同じ添削からの再登録で重複させない）。
+ * 同じ英文がすでにそのコースにあれば入れない（書き直しで同じ文が出ても重複させない）。
  */
 export async function addToMonologueCourse(input: {
+  courseId?: string | null;
+  topicJa?: string | null;
   rows: CompositionDraft[];
-}): Promise<ActionResult<{ courseId: string; added: number; skipped: number }>> {
+}): Promise<
+  ActionResult<{ courseId: string; courseTitle: string; added: number; skipped: number }>
+> {
   const user = await getCurrentUser();
   if (!user) return AUTH_REQUIRED;
 
@@ -263,34 +271,48 @@ export async function addToMonologueCourse(input: {
 
   const supabase = await createClient();
 
-  const { data: found, error: findError } = await supabase
-    .from('composition_courses')
-    .select('id')
-    .eq('title', MONOLOGUE_COURSE_TITLE)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (findError) return { ok: false, error: findError.message };
-
-  let courseId = found?.id ?? null;
-  if (!courseId) {
+  // 同じ添削から2回目以降。RLS で自分のコースしか引けない。途中で消されていたら次の手へ
+  let course: { id: string; title: string } | null = null;
+  if (input.courseId) {
+    const { data: found, error: findError } = await supabase
+      .from('composition_courses')
+      .select('id, title')
+      .eq('id', input.courseId)
+      .maybeSingle();
+    if (findError) return { ok: false, error: findError.message };
+    course = found;
+  }
+  // 同じ日・同じお題で添削し直した文は、同じ名前のコースにまとめる（同名のコースを並べない）
+  const title = monologueCourseTitle(todayJst(), input.topicJa ?? null);
+  if (!course) {
+    const { data: found, error: findError } = await supabase
+      .from('composition_courses')
+      .select('id, title')
+      .eq('title', title)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (findError) return { ok: false, error: findError.message };
+    course = found;
+  }
+  if (!course) {
     const { data: created, error: createError } = await supabase
       .from('composition_courses')
       .insert({
         user_id: user.id,
-        title: MONOLOGUE_COURSE_TITLE,
+        title,
         description: '独り言で書いて添削してもらった表現',
       })
-      .select('id')
+      .select('id, title')
       .single();
     if (createError) return { ok: false, error: createError.message };
-    courseId = created.id;
+    course = created;
   }
 
   const { data: existing, error: existingError } = await supabase
     .from('compositions')
     .select('en')
-    .eq('course_id', courseId);
+    .eq('course_id', course.id);
   if (existingError) return { ok: false, error: existingError.message };
 
   const seen = new Set((existing ?? []).map((r) => normalizeEn(r.en)));
@@ -302,15 +324,20 @@ export async function addToMonologueCourse(input: {
   });
 
   if (fresh.length > 0) {
-    const error = await insertRows(supabase, user.id, courseId, fresh, 'manual');
+    const error = await insertRows(supabase, user.id, course.id, fresh, 'manual');
     if (error) return { ok: false, error };
   }
 
   revalidatePath('/compositions');
-  revalidatePath(`/compositions/${courseId}`);
+  revalidatePath(`/compositions/${course.id}`);
   return {
     ok: true,
-    data: { courseId, added: fresh.length, skipped: rows.length - fresh.length },
+    data: {
+      courseId: course.id,
+      courseTitle: course.title,
+      added: fresh.length,
+      skipped: rows.length - fresh.length,
+    },
   };
 }
 

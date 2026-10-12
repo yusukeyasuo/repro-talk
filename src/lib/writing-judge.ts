@@ -67,3 +67,17 @@ export function isCompleteWritingJudge(
     result.alternatives.every((a) => a.en.trim() !== '')
   );
 }
+
+/** コース名に入れるお題の上限。一覧のカードで読める長さに収める。 */
+const COURSE_TOPIC_MAX = 80;
+
+/**
+ * 独り言の「書く」から登録するときのコース名。1回の添削につき1コース作るので、
+ * 一覧で「いつ・何の話か」が分かるよう日付とお題を入れる（例「独り言 10/12 好きな食べ物」）。
+ * dateIso は JST の YYYY-MM-DD（端末の時刻に依らせないためサーバで決める）。
+ */
+export function monologueCourseTitle(dateIso: string, topicJa: string | null): string {
+  const [, m, d] = dateIso.split('-').map(Number);
+  const topic = (topicJa ?? '').trim().slice(0, COURSE_TOPIC_MAX);
+  return topic ? `独り言 ${m}/${d} ${topic}` : `独り言 ${m}/${d}`;
+}

@@ -261,7 +261,7 @@ export function WritingPanel({ topic, guard }: Props) {
           )}
 
           {/* 反復して覚えたい文を瞬間英作文へ。選ぶのは本人（AI の出力を無検品で入れない） */}
-          <RegisterCompositionDialog result={result} />
+          <RegisterCompositionDialog result={result} topicJa={topic?.title_ja ?? null} />
 
           <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" size="lg" className="h-12" onClick={rewrite}>
