@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useId, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { importCustomTopics } from '@/app/actions/monologue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -70,7 +71,7 @@ export function SuggestTopicsDialog() {
 
     void (async () => {
       try {
-        const res = await fetch('/api/ai/topic-ideas', {
+        const res = await apiFetch('/api/ai/topic-ideas', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ direction: trimmed, count, avoid: shownRef.current }),

@@ -4,6 +4,7 @@ import { ArrowRight, Check, PenLine, Plus, Send, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { addPhrases } from '@/app/actions/phrases';
 import { RegisterCompositionDialog } from '@/components/monologue/register-composition-dialog';
 import { Badge } from '@/components/ui/badge';
@@ -79,7 +80,7 @@ export function WritingPanel({ topic, guard }: Props) {
     abortRef.current = controller;
     void (async () => {
       try {
-        const res = await fetch('/api/ai/monologue-writing-judge', {
+        const res = await apiFetch('/api/ai/monologue-writing-judge', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({

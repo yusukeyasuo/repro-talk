@@ -1,10 +1,27 @@
 import { NextResponse } from 'next/server';
 
 import { AiParseError, AiRefusalError, AiTruncatedError } from './ai/run';
+import { SESSION_REFRESH_HEADER } from './auth-session';
 
 /** middleware は /api/ を除外しているので、各 Route Handler が自分で認証する。 */
 export function unauthorized() {
   return NextResponse.json({ error: 'ログインが必要です' }, { status: 401 });
+}
+
+/** access token の残りが短い。`/api/auth/refresh` で更新してから出直してほしい。 */
+export function sessionRefreshRequired() {
+  return NextResponse.json(
+    { error: 'ログインの更新が必要です。もう一度試してください' },
+    { status: 401, headers: { [SESSION_REFRESH_HEADER]: '1' } },
+  );
+}
+
+/** Supabase に確認できなかった（圏外・一時障害）。ログアウトはしていない。 */
+export function unverified() {
+  return NextResponse.json(
+    { error: '接続を確認できませんでした。ログアウトはしていません。少し待ってもう一度試してください' },
+    { status: 503 },
+  );
 }
 
 export function badRequest(message: string) {

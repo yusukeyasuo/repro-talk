@@ -4,6 +4,7 @@ import { Check, Sparkles } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { addPhrases } from '@/app/actions/phrases';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -28,7 +29,7 @@ export function PhrasePanel({ clipId, transcript }: Props) {
   async function extract() {
     setLoading(true);
     try {
-      const res = await fetch('/api/ai/phrases', {
+      const res = await apiFetch('/api/ai/phrases', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ transcript }),

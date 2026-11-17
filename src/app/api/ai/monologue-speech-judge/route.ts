@@ -3,9 +3,9 @@ import * as z from 'zod';
 
 import { MONOLOGUE_SPEECH_JUDGE_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { AiParseError, runStructured } from '@/lib/ai/run';
-import { aiErrorResponse, badRequest, unauthorized } from '@/lib/api';
+import { aiErrorResponse, badRequest } from '@/lib/api';
 import { isCompleteSpeechJudge } from '@/lib/speech-judge';
-import { getCurrentUser } from '@/lib/supabase/server';
+import { getApiAuth } from '@/lib/supabase/api';
 
 // max_tokens を非ストリーミングの上限まで取るので、生成が既定（120秒）に収まらないことがある
 export const maxDuration = 300;
@@ -53,8 +53,8 @@ const SpeechJudgeResult = z.object({
 });
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return unauthorized();
+  const auth = await getApiAuth();
+  if (!auth.ok) return auth.response;
 
   let body: unknown;
   try {

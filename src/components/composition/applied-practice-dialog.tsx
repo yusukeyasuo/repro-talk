@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useId, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { importCompositions } from '@/app/actions/compositions';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -89,7 +90,7 @@ export function AppliedPracticeDialog({
 
     void (async () => {
       try {
-        const res = await fetch('/api/ai/composition-ideas', {
+        const res = await apiFetch('/api/ai/composition-ideas', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({

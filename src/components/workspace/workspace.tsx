@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch, ensureFreshSession } from '@/lib/api-fetch';
 import { logPractice, updateClip } from '@/app/actions/clips';
 import { saveRecording } from '@/app/actions/recordings';
 import { AnnotationEditor } from '@/components/annotation/annotation-editor';
@@ -200,6 +201,8 @@ export function Workspace({ clip, material, userId, running }: Props) {
   async function uploadRecording(result: RecordedClip) {
     setUploading(true);
     try {
+      // ブラウザ側でトークンを回転させないよう、先にサーバで更新しておく（src/lib/supabase/client.ts）。
+      await ensureFreshSession();
       const supabase = createClient();
       const path = `${userId}/reproduction/${crypto.randomUUID()}.${extensionForMimeType(
         result.mimeType,
@@ -230,7 +233,7 @@ export function Workspace({ clip, material, userId, running }: Props) {
     if (!transcript) return;
     setAnalyzing(true);
     try {
-      const res = await fetch('/api/ai/annotate', {
+      const res = await apiFetch('/api/ai/annotate', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ transcript }),
@@ -257,7 +260,7 @@ export function Workspace({ clip, material, userId, running }: Props) {
     if (!transcript || generatingIpa) return;
     setGeneratingIpa(true);
     try {
-      const res = await fetch('/api/ai/ipa', {
+      const res = await apiFetch('/api/ai/ipa', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ transcript }),
@@ -288,7 +291,7 @@ export function Workspace({ clip, material, userId, running }: Props) {
     setNaturalizing(true);
     setSuggestion(null);
     try {
-      const res = await fetch('/api/ai/naturalize', {
+      const res = await apiFetch('/api/ai/naturalize', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ text: transcript }),

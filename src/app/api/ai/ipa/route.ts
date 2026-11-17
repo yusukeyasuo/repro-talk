@@ -3,9 +3,9 @@ import * as z from 'zod';
 
 import { IPA_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { runStructured } from '@/lib/ai/run';
-import { aiErrorResponse, badRequest, unauthorized } from '@/lib/api';
+import { aiErrorResponse, badRequest } from '@/lib/api';
 import { resolveAiPronunciations } from '@/lib/pronunciation-anchor';
-import { getCurrentUser } from '@/lib/supabase/server';
+import { getApiAuth } from '@/lib/supabase/api';
 
 export const maxDuration = 120;
 
@@ -19,8 +19,8 @@ const IpaResult = z.object({
 });
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return unauthorized();
+  const auth = await getApiAuth();
+  if (!auth.ok) return auth.response;
 
   let body: unknown;
   try {

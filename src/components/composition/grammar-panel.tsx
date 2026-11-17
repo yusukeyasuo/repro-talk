@@ -3,6 +3,7 @@
 import { RotateCcw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 
@@ -55,7 +56,7 @@ export function GrammarPanel({ ja, en, onClose }: Props) {
 
     void (async () => {
       try {
-        const res = await fetch('/api/ai/grammar', {
+        const res = await apiFetch('/api/ai/grammar', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ja, en }),

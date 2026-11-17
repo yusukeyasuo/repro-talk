@@ -4,6 +4,7 @@ import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
@@ -35,7 +36,7 @@ export function ExplainPanel({ transcript, onAppendMemo }: Props) {
     try {
       const selection =
         typeof window !== 'undefined' ? window.getSelection()?.toString() ?? '' : '';
-      const res = await fetch('/api/ai/explain', {
+      const res = await apiFetch('/api/ai/explain', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ transcript, selection, question }),
