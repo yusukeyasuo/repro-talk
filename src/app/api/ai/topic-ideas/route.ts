@@ -3,8 +3,8 @@ import * as z from 'zod';
 
 import { TOPIC_IDEAS_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { runStructured } from '@/lib/ai/run';
-import { aiErrorResponse, badRequest, unauthorized } from '@/lib/api';
-import { createClient, getCurrentUser } from '@/lib/supabase/server';
+import { aiErrorResponse, badRequest } from '@/lib/api';
+import { getApiAuth } from '@/lib/supabase/api';
 import { dedupeTopicSuggestions } from '@/lib/topic-suggestions';
 
 export const maxDuration = 120;
@@ -26,8 +26,9 @@ const TopicIdeas = z.object({
 });
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return unauthorized();
+  const auth = await getApiAuth();
+  if (!auth.ok) return auth.response;
+  const { supabase } = auth;
 
   let body: unknown;
   try {
@@ -61,7 +62,6 @@ export async function POST(request: Request) {
 
   // 既存のお題はクライアントに言われるまま使わずサーバで引く。
   // RLS が「共通シード＋自分のお題」だけ返すので、そのまま重複判定に使える。
-  const supabase = await createClient();
   const { data } = await supabase.from('monologue_topics').select('title_en, title_ja');
   const existing = [
     ...(data ?? []).map((topic) => ({ titleEn: topic.title_en, titleJa: topic.title_ja })),

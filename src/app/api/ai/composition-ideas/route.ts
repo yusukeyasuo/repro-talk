@@ -3,13 +3,13 @@ import * as z from 'zod';
 
 import { COMPOSITION_IDEAS_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { runStructured } from '@/lib/ai/run';
-import { aiErrorResponse, badRequest, unauthorized } from '@/lib/api';
+import { aiErrorResponse, badRequest } from '@/lib/api';
 import {
   buildIdeaSeedGroups,
   dedupeCompositionIdeas,
   type CompositionSeed,
 } from '@/lib/composition-ideas';
-import { createClient, getCurrentUser } from '@/lib/supabase/server';
+import { getApiAuth } from '@/lib/supabase/api';
 
 // 1問ずつ作るのではなく1回でまとめて作らせる。20問 × effort:'high' は他の AI 導線
 // （120秒）に収まらないことがあるので、この経路だけ長めに取る。
@@ -40,8 +40,9 @@ const CompositionIdeas = z.object({
 });
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return unauthorized();
+  const auth = await getApiAuth();
+  if (!auth.ok) return auth.response;
+  const { user, supabase } = auth;
 
   let body: unknown;
   try {
@@ -72,7 +73,6 @@ export async function POST(request: Request) {
         .map((item) => item.trim().slice(0, 200))
     : [];
 
-  const supabase = await createClient();
 
   // 材料はクライアントに言われるまま使わずサーバで引く（RLS 越しに読めなければ他人のコース）。
   const [{ data: course }, { data: rows }, { data: profile }] = await Promise.all([

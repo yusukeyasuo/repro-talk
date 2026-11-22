@@ -4,8 +4,8 @@ import * as z from 'zod';
 import { PHONETICS_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { runStructured } from '@/lib/ai/run';
 import { resolveAiAnnotations } from '@/lib/annotation-anchor';
-import { aiErrorResponse, badRequest, unauthorized } from '@/lib/api';
-import { getCurrentUser } from '@/lib/supabase/server';
+import { aiErrorResponse, badRequest } from '@/lib/api';
+import { getApiAuth } from '@/lib/supabase/api';
 import { ANNOTATION_TYPES } from '@/types/annotation';
 
 export const maxDuration = 120;
@@ -27,8 +27,8 @@ const AnnotateResult = z.object({
 });
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return unauthorized();
+  const auth = await getApiAuth();
+  if (!auth.ok) return auth.response;
 
   let body: unknown;
   try {

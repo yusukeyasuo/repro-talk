@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { createTextClip } from '@/app/actions/clips';
 import { Button } from '@/components/ui/button';
 import {
@@ -47,7 +48,7 @@ export function AddTextClipDialog() {
     setNaturalizing(true);
     setSuggestion(null);
     try {
-      const res = await fetch('/api/ai/naturalize', {
+      const res = await apiFetch('/api/ai/naturalize', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ text: body }),

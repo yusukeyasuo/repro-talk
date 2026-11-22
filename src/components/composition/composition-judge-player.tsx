@@ -4,6 +4,7 @@ import { Check, ChevronLeft, ChevronRight, RotateCcw, Send, Star, Volume2, X } f
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { logCompositionReps, updateComposition } from '@/app/actions/compositions';
 import { type PlayProgress } from '@/components/composition/composition-player';
 import { Badge } from '@/components/ui/badge';
@@ -162,7 +163,7 @@ export function CompositionJudgePlayer({
 
     void (async () => {
       try {
-        const res = await fetch('/api/ai/composition-judge', {
+        const res = await apiFetch('/api/ai/composition-judge', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ja: current.ja, en: current.en, attempt: attempt.trim() }),

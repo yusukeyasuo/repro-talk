@@ -1,5 +1,7 @@
 'use client';
 
+import { apiFetch } from '@/lib/api-fetch';
+
 /**
  * 例文の読み上げ。まずクラウドTTS（サーバ生成のMP3を <audio> で再生）を試し、
  * 使えないとき（OPENAI_API_KEY 未設定・生成失敗・再生ブロック）は
@@ -79,7 +81,7 @@ function fallbackSpeak(text: string, onstart: () => void, onend: () => void) {
 // --- クラウドTTS ----------------------------------------------------------
 async function fetchTtsUrl(text: string): Promise<string | null> {
   try {
-    const res = await fetch('/api/tts', {
+    const res = await apiFetch('/api/tts', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text }),

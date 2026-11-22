@@ -3,8 +3,8 @@ import * as z from 'zod';
 
 import { MONOLOGUE_WRITING_JUDGE_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { AiParseError, runStructured } from '@/lib/ai/run';
-import { aiErrorResponse, badRequest, unauthorized } from '@/lib/api';
-import { getCurrentUser } from '@/lib/supabase/server';
+import { aiErrorResponse, badRequest } from '@/lib/api';
+import { getApiAuth } from '@/lib/supabase/api';
 import { isCompleteWritingJudge } from '@/lib/writing-judge';
 
 // 添削は effort high で全文の書き直しまで出すので、既定（120秒）に収まらないことがある
@@ -55,8 +55,8 @@ const WritingJudgeResult = z.object({
 });
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return unauthorized();
+  const auth = await getApiAuth();
+  if (!auth.ok) return auth.response;
 
   let body: unknown;
   try {

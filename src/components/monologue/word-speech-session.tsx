@@ -4,6 +4,7 @@ import { Check, RotateCcw, Send, Shuffle, Sparkles, Volume2, X } from 'lucide-re
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { useStudyGuard } from '@/components/study/study-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -104,7 +105,7 @@ export function WordSpeechSession({ courses, running }: Props) {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const res = await fetch('/api/ai/speech-words', {
+      const res = await apiFetch('/api/ai/speech-words', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ courseId, count: nextCount, avoid: nextAvoid }),
@@ -151,7 +152,7 @@ export function WordSpeechSession({ courses, running }: Props) {
     abortRef.current = controller;
     void (async () => {
       try {
-        const res = await fetch('/api/ai/monologue-speech-judge', {
+        const res = await apiFetch('/api/ai/monologue-speech-judge', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ words: words.map((w) => w.ja), speech: speech.trim() }),

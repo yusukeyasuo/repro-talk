@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
+import { apiFetch } from '@/lib/api-fetch';
 import { saveMonologueFeedback, saveMonologueSession } from '@/app/actions/monologue';
 import { addPhrases, markPhraseUsed } from '@/app/actions/phrases';
 import { Badge } from '@/components/ui/badge';
@@ -199,7 +200,7 @@ export function MonologueSession({ topics, phrases, goalSec, running }: Props) {
     if (!jaMemo.trim()) return;
     setAskingAi(true);
     try {
-      const res = await fetch('/api/ai/monologue-feedback', {
+      const res = await apiFetch('/api/ai/monologue-feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ja_memo: jaMemo, topic: topic?.title_en }),

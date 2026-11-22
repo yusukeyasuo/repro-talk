@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { badRequest, unauthorized } from '@/lib/api';
-import { createClient } from '@/lib/supabase/server';
+import { badRequest } from '@/lib/api';
+import { getApiAuth } from '@/lib/supabase/api';
 import { TTS_MODEL, TTS_VOICE, normalizeTtsText, ttsCacheKey } from '@/lib/tts-cache';
 
 // 生成は最大でも数秒。長文でも十分な余裕を取る。
@@ -15,11 +15,9 @@ const MAX_LEN = 500;
  * OPENAI_API_KEY 未設定なら 503 を返し、クライアントは speechSynthesis にフォールバックする。
  */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return unauthorized(); // 生成はログインユーザーだけ（OpenAI コストの濫用防止）
+  const auth = await getApiAuth();
+  if (!auth.ok) return auth.response; // 生成はログインユーザーだけ（OpenAI コストの濫用防止）
+  const { supabase } = auth;
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {

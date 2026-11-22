@@ -3,8 +3,8 @@ import * as z from 'zod';
 
 import { SPEECH_WORDS_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { runStructured } from '@/lib/ai/run';
-import { aiErrorResponse, badRequest, unauthorized } from '@/lib/api';
-import { createClient, getCurrentUser } from '@/lib/supabase/server';
+import { aiErrorResponse, badRequest } from '@/lib/api';
+import { getApiAuth } from '@/lib/supabase/api';
 
 export const maxDuration = 120;
 
@@ -37,8 +37,9 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return unauthorized();
+  const auth = await getApiAuth();
+  if (!auth.ok) return auth.response;
+  const { supabase } = auth;
 
   let body: unknown;
   try {
@@ -67,7 +68,6 @@ export async function POST(request: Request) {
         .map((item) => item.trim().slice(0, 100))
     : [];
 
-  const supabase = await createClient();
 
   // 材料はクライアントに言われるまま使わずサーバで引く（RLS 越しに読めなければ他人のコース）。
   const [{ data: course }, { data: rows }] = await Promise.all([

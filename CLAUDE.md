@@ -51,7 +51,8 @@ YouTube動画「【結論！】英語が話せなかった私が1年未満でペ
 ```
 supabase/migrations/     0001 スキーマ+RLS+Storage / 0002 お題30件 / 0008 学習時間の計測 / 0009 週の目標 / 0010 発音記号 / 0011 応用練習の出自
 src/proxy.ts             Supabase セッション更新 + 未ログインを /login へ（旧 middleware.ts）
-src/lib/auth-session.ts  ログイン判定の純粋ロジック（未ログイン／確認できなかった の切り分け）
+src/lib/auth-session.ts  ログイン判定の純粋ロジック（未ログイン／確認できなかった の切り分け・認証クッキーの読み取り）
+src/lib/supabase/api.ts  /api の認証（トークンを回転させない）。クライアントは src/lib/api-fetch.ts の apiFetch() で呼ぶ
 src/app/(app)/           認証必須のページ群
 src/app/api/ai/*         Claude API を叩く Route Handler（proxy の matcher 対象外なので各自で認証）
 src/app/actions/*        Server Actions（DB 書き込み）
@@ -90,6 +91,7 @@ src/lib/study-server.ts  学習時間のサーバ読み取り（Server Action �
 - **終了ボタンを押し忘れた行は 0分 で締めて印（`auto_closed`）を付ける**。それらしい時間を作らない。`study_sessions.duration_sec` は生成列なので、あとから直すときは時刻のほうを動かす（「開始19:00・終了19:30・45分」のような矛盾した行を作れない）。**`study_sec` と `monologue_sec` は同じ時間が重なる**ので、表示でも集計でも足し合わせない（ヒートマップの分の項は大きいほうだけを採る）
 - **ログイン状態は「未ログイン」と「確認できなかった」を分ける**。`getUser()` は Supabase への HTTP リクエストなので、圏外・一時障害・429 でも user は null になる。そのまま `/login` へ飛ばすとセッションは生きているのに追い出され、内蔵メールの上限（1時間に2通）まで巻き込む。判定は `judgeAuth()`（`src/lib/auth-session.ts`）に集約し、**`unverified` は追い出さずに通す**（`(app)` レイアウトは `ConnectionLost` を出す）。歩きながら使うアプリなので、電波の切れ目をログアウトに化けさせない
 - **認証クッキーは proxy が毎リクエスト、サーバから打ち直す**（`Max-Age` 400日）。`@supabase/ssr` のブラウザ側は `document.cookie` で書く＝Safari の「7日触っていないと JS が書いたストレージを消す」対象になるので、サーバの `Set-Cookie` で上書きし続けて寿命を転がす。`code-verifier` は使い捨てなので延命しない。**リダイレクトを返すときは Supabase が書いたクッキーを載せ替える**（落とすと無効なトークンが残って弾かれ続ける）
+- **refresh token を回転させてよいのは短いリクエストの中だけ**（proxy と `/api/auth/refresh`）。Supabase は古い refresh token が10秒を過ぎて使われるとセッションごと失効させる。長い AI 呼び出しの中で回転させると新しいトークンが届く前に古いものが使われる（中断・圏外なら届かない）。だから **`/api/*` の認証は `getApiAuth()` を使い**（`getCurrentUser()` / `createClient()` を使わない）、クライアントからは **`apiFetch()` で呼ぶ**（残りが短いと更新して1回だけ出直す）。proxy のクッキーの打ち直しは残り15分以上のときだけ（古い値で新しいトークンを上書きしない）。ブラウザ側クライアントは自動更新を切ってある
 - **ログインの失敗理由は必ず画面に出す**（`/login?error=verify|expired|link`）。無言でフォームに戻すと「メールが効かない」と見えて再送を誘発し、メールの上限に当たる。**`AuthPKCECodeVerifierMissingError` はリンクを送ったブラウザと別のブラウザで開いた合図**（code-verifier はクッキーにある）なので、そう書く
 - **`'use server'` のファイルに読み取りを置かない**。export がすべて公開エンドポイントになる。サーバコンポーネント専用の読み取りは `src/lib/*-server.ts` に置く
 - **ホームの「今週」は月曜始まりの暦週で統一する**（`weekStartJst()`）。目標のためにローリング7日と混ぜると、同じ画面で「今週」が2つの意味になり、達成率も日が進むだけで目減りする。**`profiles.weekly_goal_sec` の 0 は未設定**で、既定値を置かない（本人が決めていない数字に対して未達を出し続けない）。`daily_goal_sec`（1日の独り言＝声を出す時間）とは別の軸なので列を分ける
